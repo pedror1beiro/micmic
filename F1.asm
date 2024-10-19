@@ -1,69 +1,59 @@
-.include<m128def.inc>
-.EQU LEDSW1 = 0b00000000; referente à primeira tabela
-.EQU LEDSw2 = 0b10101010
-.EQU LEDSW3 = 0b01010101
-.EQU LEDSW4 = 0b11100111
-.EQU LEDSW6 = 0b11111111 
-.EQU SW1 = 0; referente às saídas dos sw's    definidas as posições dos switches (interruptores) no registrador de entrada do microcontrolador (PINA)
-.EQU SW2 = 1
-.EQU SW3 = 2
-.EQU SW4 = 3
-.EQU SW6 = 5
+.equ ledsw1 = 0b00000000
+.equ ledsw2 = 0b10101010
+.equ ledsw3 = 0b01010101
+.equ ledsw4 = 0b11100111
+.equ ledsw6 = 0b11111111
+.equ sw1 = 0
+.equ sw2 = 1
+.equ sw3 = 2
+.equ sw4 = 3
+.equ sw6 = 5
 
-.CSEG; indica o início do segmento de código
-.ORG 0; define que o código começará no endereço 0 da memória
+.cseg
+.org 0
 
+main:
+    clr r16
+    ldi r16, 0b00000000		; Configura os pinos de entrada
+    out DDRA, r16		; Configura todos os pinos como entrada
+    ldi r16, 0b11111111		; Configurar os pinos de saÃ­da
+    out DDRC, r16
+    out PORTC, r16		; Desliga todos os LEDs inicialmente 
 
-MAIN:
+loop:
+    sbis PINA, sw1		; Se SW1 estiver pressionado executa a linha seguinte no cÃ³digo
+    rjmp ligartodosleds
+    sbis PINA, sw2		; Se SW2 estiver pressionado executa a linha seguinte no cÃ³digo
+    rjmp ligarledssw2
+    sbis PINA, sw3		; Se SW3 estiver pressionado executa a linha seguinte no cÃ³digo
+    rjmp ligarledssw3
+    sbis PINA, sw4		; Se SW4 estiver pressionado executa a linha seguinte no cÃ³digo
+    rjmp ligarledssw4
+    sbis PINA, sw6		; Se SW6 estiver pressionado executa a linha seguinte no cÃ³digo
+    rjmp ligarledssw6
+    rjmp loop
 
-	CLR R16
+ligartodosleds:
+    ldi r16, ledsw1
+    out PORTC, r16		; Liga todos os LEDs
+    rjmp loop
 
-	LDI R16, 0b00000000; configura os pinos de entrada
-	OUT DDRA, R16;  configurados todos os pinos como entradas
+ligarledssw2:
+    ldi r16, ledsw2
+    out PORTC, r16		; Liga todos os LEDs do SW2
+    rjmp loop
 
-	LDI R16, 0b11111111; configura os portas de saida
-	OUT DDRC, R16
-	OUT PORTC, R16; desliga todos os LEDs inicialmente
+ligarledssw3:
+    ldi r16, ledsw3
+    out PORTC, r16		; Liga todos os LEDs do SW3
+    rjmp loop
 
-LOOP:
+ligarledssw4:
+    ldi r16, ledsw4
+    out PORTC, r16		; Liga todos os LEDs do SW4
+    rjmp loop
 
-	SBIS PINA, SW1; se o bit for 0 nao salta
-	JMP LIGARTODOSLEDS
-	SBIS PINA, SW2
-	JMP LIGARLEDSSW2
-	SBIS PINA, SW3
-	JMP LIGARLEDSSW3
-	SBIS PINA, SW4
-	JMP LIGARLEDSSW4
-	SBIS PINA, SW6
-	JMP LIGARLEDSSW6
-	JMP LOOP
-
-
-LIGARTODOSLEDS:
-	LDI R16, LEDSW1
-	OUT PORTC, R16
-	JMP LOOP
-
-
-LIGARLEDSSW2:
-	LDI R16, LEDSW2
-	OUT PORTC, R16
-	JMP LOOP
-
-
-LIGARLEDSSW3:
-	LDI R16, LEDSW3
-	OUT PORTC, R16
-	JMP LOOP
-
-LIGARLEDSSW4:
-	LDI R16, LEDSW4
-	OUT PORTC, R16
-	JMP LOOP
-
-LIGARLEDSSW6:
-	LDI R16, LEDSW6
-	OUT PORTC, R16
-	JMP LOOP
-
+ligarledssw6:
+    ldi r16, ledsw6
+    out PORTC, r16		; Liga todos os LEDs do SW6
+    rjmp loop
