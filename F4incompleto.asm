@@ -1,12 +1,12 @@
-.def letter_index = r16        ; Registro para armazenar o índice da letra atual
+.def letter_index = r16        ; Registro para armazenar o ï¿½ndice da letra atual
 .def blink_flag = r17          ; Registro para armazenar o estado de piscar
 .def delay_counter = r18       ; Registro para contagem de delay
 
 .cseg
 .org 0x00                      ; Vetor de Reset
     jmp init
-
-.org 0x46                      ; Início do código principal
+.org 0x001E
+.org 0x46                      ; Inï¿½cio do cï¿½digo principal
 
 ;=====================
 ; Tabela de Segmentos para as Letras (setseg)
@@ -18,18 +18,18 @@ setseg:
     .db 0b01100111, 0b01010000, 0b01101101, 0b01111000, 0b00111110, 0b00101110, 0b01011110, 0b01110110
     .db 0b01101110, 0b01011011
 
-    ; Correspondente aos caracteres de A até Z no display de 7 segmentos
+    ; Correspondente aos caracteres de A atï¿½ Z no display de 7 segmentos
 
 init:
-    ldi r16, 0b11111111        ; Configura PORTC (Display) como saída
+    ldi r16, 0b11111111        ; Configura PORTC (Display) como saï¿½da
     out DDRC, r16
     out PORTC, r16             ; Desliga todos os segmentos do display
 
     ldi r16, 0b11111100        ; Configura PORTD (Switches) como entrada
     out DDRD, r16
 
-    ldi letter_index, 0        ; Inicia a roleta na letra "A" (índice 0)
-    clr blink_flag             ; Inicialmente, o piscar está desativado
+    ldi letter_index, 0        ; Inicia a roleta na letra "A" (ï¿½ndice 0)
+    clr blink_flag             ; Inicialmente, o piscar estï¿½ desativado
 
     ; Configura o stack pointer
     ldi r24, low(RAMEND)
@@ -47,19 +47,19 @@ main_loop:
     rjmp main_loop
 
 start_roulette:
-    ; Mostra as letras de A até Z no display a cada 200ms
+    ; Mostra as letras de A atï¿½ Z no display a cada 200ms
     call display_letter
     call delay_200ms
 
-    ; Incrementa o índice da letra
+    ; Incrementa o ï¿½ndice da letra
     inc letter_index
-    cpi letter_index, 26        ; Se passar da letra Z (índice 25), reinicia para A (índice 0)
+    cpi letter_index, 26        ; Se passar da letra Z (ï¿½ndice 25), reinicia para A (ï¿½ndice 0)
     brlo main_loop
     clr letter_index
     rjmp main_loop
 
 stop_and_blink:
-    ; Pisca a letra atual durante 3 segundos, com frequência de 1 Hz
+    ; Pisca a letra atual durante 3 segundos, com frequï¿½ncia de 1 Hz
     ldi delay_counter, 6        ; Piscar por 3 segundos (6 ciclos de 500ms)
 blink_loop:
     sbic PIND, 1               ; Verifica se SW2 (Stop) foi pressionado novamente
@@ -77,7 +77,7 @@ turn_off_display:
 blink_delay:
     call delay_500ms           ; Atraso de 500ms para controlar o piscar
     dec delay_counter
-    brne blink_loop            ; Continua piscando até que 3 segundos passem
+    brne blink_loop            ; Continua piscando atï¿½ que 3 segundos passem
     clr blink_flag
     rjmp main_loop
 
@@ -86,13 +86,13 @@ resume_roulette:
     rjmp main_loop
 
 ;=====================
-; Funções Auxiliares
+; Funï¿½ï¿½es Auxiliares
 ;=====================
 
 display_letter:
-    ldi ZL, low(setseg)        ; Carrega a parte baixa do endereço da tabela setseg no registrador ZL
-    ldi ZH, high(setseg)       ; Carrega a parte alta do endereço da tabela setseg no registrador ZH
-    add ZL, letter_index       ; Adiciona o índice da letra ao registrador ZL para buscar a letra correta
+    ldi ZL, low(setseg)        ; Carrega a parte baixa do endereï¿½o da tabela setseg no registrador ZL
+    ldi ZH, high(setseg)       ; Carrega a parte alta do endereï¿½o da tabela setseg no registrador ZH
+    add ZL, letter_index       ; Adiciona o ï¿½ndice da letra ao registrador ZL para buscar a letra correta
     ld r24, Z                  ; Carrega o valor da tabela no registrador r24
     out PORTC, r24             ; Envia o valor para o display
     ret
