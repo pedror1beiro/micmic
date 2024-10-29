@@ -1,168 +1,172 @@
-/*2DA_T1_1131158_Modified.asm
- */ 
+.def valorpeca = r18
+.def aux = r21
 
- .include<m128def.inc>
-
-.def	regtemp = r16		//define palavra regtemp como sendo o registo r16
-.def	status_flag = r17	//registo utilizado para guardar flags de eventos
-.def	num_caps = r18		//regista numero de capsulas presentes na maquina
-.def	max_caps = r19		//regista o numero maximo de capsulas permitidos na maquina
-.def	min_lim = r20		//regista o numero de capsulas presentes na maquina (aquando de VE on) a partil do qual ja se aceitam novas capsulas
-.equ	limit_sw6	= 2		//variaveis para facilitar a escrita e leitura do codigo
-.equ	limit_sw4 = 1		//correspondentes a sw's
-.equ	limit_sw2 = 0
-.equ	sw_add = 4
-.equ	sw_remove = 5
-.equ	led_limit6 = 2		//corespondentes a led's			
-.equ	led_limit4 = 1
-.equ	led_limit2 = 0
-.equ	led_ve = 7   
-.equ	empty_flag = 0		//flag indicativo de que o tambor da maquina se encontra vazio
-//.equ	add_caps = 5
 
 .cseg
-.org	0x00				//vetor de reset com jump para a main			
-	jmp	main
-.cseg						
-.org	0x46				//comeca a escrever no espaco de memoria de programa 0x46
-setseg: .dd	0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90	//guarda na memoria de programa a tabela para disp 7seg.
-																//atribuindo o nome ao espaco de memoria
+.org 0x00
+    rjmp main             ; Início do programa, salta para a rotina main
+
+; Tabela para display de 7 segmentos (valores 0-9)
+setseg: .db 0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90
+
 main:
-//CODIGO PARA INICIAR O STACK POINTER
-	ldi r16, 0xFF
-	out SPL, r16
-	ldi r16, 0x10
-	out SPH, r16
-call init_ports
+	ldi valorpeca, 0
+    ldi r16, 0b11111111
+    out DDRA, r16         ; Define o PortA como saída (para LEDs e display)
+	out porta,r16
+    ldi r16,0b11000000
+	out ddrd,r16			//portD sw's + escolha disp - entrada + saida
+	out portd,r16
+	ldi r16, 0b11111111
+	out DDRC, r16
+	out portc,r16
+    ; Inicializa o stack pointer (SP)
+    ldi r16, 0xFF
+    out SPL, r16          
+    ldi r16, 0x10
+    out SPH, r16          
+
+   ldi r16,0b11111110		//ligar motor(led1)
+	out porta,r16       ; Liga o motor (LED) inicialmente
+	ldi r16,0xC0				//display 0
+	out portc,r16
+
+ciclo:
+	call SP
+	call parar_motor
+	call sw0
+
+	//call SC
+	call SC 
+rjmp ciclo
 
 
-	loop:
-	//verifica sw de limitadores
-	//verifica sw de incrementar/decrementar capsulas
-	check_limits:
-	sbis pind,limit_sw6		//verifica se foi pressionado o sw para limitar n de capsulas a 6.
-	call check_sw6
-	sbis pind,limit_sw4		//verifica se foi pressionado o sw para limitar n de capsulas a 4.
-	call check_sw4
-	sbis pind,limit_sw2		//verifica se foi pressionado o sw para limitar n de capsulas a 2.
-	call check_sw2
-	sbis pind,sw_add		//verifica se foi pressionado o sw para acrescentar capsulas
-	call add_caps
-	sbis pind,sw_remove		//verifica se foi pressionado o sw para retirar capsulas
-	call remove_caps
-	rjmp loop				//caso nao seja pressionado qualquer sw, retorna ao inicio das verificacoes
+
+parar_motor:
+    //cbi PORTA, 5          ; Desliga o motor (desativa LED no PA5) e ligar VE
+	ldi r16,0b11111111
+	out porta, r16
+ret
 
 
-	
-;==========
-;FUNCAO DE DEFINICAO DE PORTOS E ATRIBUICAO DE VALORES DEFAULT
-;==========
-init_ports:
-ldi regtemp,0b11111111		//Set All Bits in Register como 1
-out	ddra,regtemp			//portA led's - saidas
-							//led's acendem a valor logico zero
-out ddrc,regtemp			//portC display 7seg. - saidas
-ldi regtemp,0b11000000
-out ddrd,regtemp			//portD sw's + escolha disp - entrada + saida
-out portd,regtemp			
-							 
-;defaults
-//definindo o led 1,2 e 3 como indicativos do limite de capsulas imposto
-ldi regtemp,0b00000100		//inicia o VE(LED8) ligado e o limitador de capsulas a 6 (led3)
-out porta,regtemp
-ldi max_caps,6				//inicia com o limite de 6 capsulas
-ldi min_lim,1				
-lpm regtemp,z				//carrega primeiro valor da tabela
-out portc,regtemp			//e inicia disp com valor zero
-ldi	num_caps,0				//inicia a maquina com 0 capsulas
+sw0:
+sbic PIND, 0; Verifica se o switch PD1 está pressionado
+rjmp sw1
+call delay
+sbic PIND, 0; Verifica se o switch PD1 está pressionado
+rjmp sw1	          
+    ldi valorpeca, 2            ; Se estiver, seleciona 2 peças
+	call mostrar_pecas   ; Atualiza o display de 7 segmentos com o número de peças
+	call VEon
 ret
 
-;==========
-;FUNCOES PARA ADICIONAR E RETIRAR CAPSULAS
-;==========
-add_caps:
-rcall delay					//chama delay, para despistar ruido/perturabacoes no sw e garantir que o mesmo esta realmente a ser pressionado
-sbic pind,sw_add			//verifica novamente sw, se tiver ocorrido um falso acionamento do sw, regressa aos testes dos sw's
+sw1:
+sbic PIND, 1          ; Verifica se o switch PD2 está pressionado
+ rjmp sw2  
+ call delay
+ sbic PIND, 1          ; Verifica se o switch PD2 está pressionado
+ rjmp sw2
+    ldi valorpeca, 4            ; Se estiver, seleciona 4 peças
+	call mostrar_pecas   ; Atualiza o display de 7 segmentos com o número de peças
+	call VEon
 ret
-	perform_add:
-	sbis pina,led_ve			//verifica se o numero de capsulas existentes na maquina permite colocar mais capsulas.
-	ret
-	inc num_caps				//incrementa o numero de capsulas na maquina
-	rcall print_disp			//envia para disp de 7 seg. numero de capsulas presentes na maquina
-	cp num_caps,max_caps		//verifca se atingiu limite maximo de capsulas permitidas
-	brne no_add				//se afirmacao falsa, regressa a testes de sw's
-	sbi porta,led_ve			//em caso afirmativo, contrario ativa valvula VE
-	no_add:
-	ret						//regressa ao teste sw's
-remove_caps:
-rcall delay					//chama delay, para despistar ruido/perturabacoes no sw e garantir que o mesmo esta realmente a ser pressionado
-sbic pind,sw_remove			//verifica novamente sw, se tiver ocorrido um falso assionamento do sw, regressa aos testes dos sw's	
+
+sw2:
+sbic PIND, 2          ; Verifica se o switch PD3 está pressionado
+rjmp sw0
+call delay
+sbic PIND, 2          ; Verifica se o switch PD2 está pressionado
+ rjmp sw2   
+    ldi valorpeca, 6            ; Se estiver, seleciona 6 peças
+	call mostrar_pecas   ; Atualiza o display de 7 segmentos com o número de peças
+	call VEon
 ret
-	perform_remove:
-	sbrc status_flag,empty_flag	//verifica se o deposito se encontra vazio			
-	ret						//em caso afirmativo regressa a testes de sw's, sem retirar capsulas
-	dec num_caps				//decrementa o numero de capsulas
-	rcall print_disp			//envia para disp de 7 seg. numero de capsulas presentes na maquina
-	cp num_caps,min_lim		//verifica se o numero de capsulas ja permite que seja desativada a valvula VE
-	brge no_add				//se afirmacao falsa, regressa a testes de sw's.
-	sbis pina,led_ve			//caso a valvula ja estiver desativa, regressa aos testes de sw's
+
+mostrar_pecas:
+
+	cpi valorpeca, 0            ; Compara o valor de r18 (número de peças) com 0
+	breq d0
+    cpi valorpeca, 1
+	breq d1
+    cpi valorpeca, 2
+    breq d2
+    cpi valorpeca, 3
+    breq d3
+    cpi valorpeca, 4
+    breq d4
+    cpi valorpeca, 5
+    breq d5
+    cpi valorpeca, 6
+    breq d6
 	ret
-	sbi porta,led_ve			//caso contratio, activa a valvula
-	cpi num_caps,0				//verificar se o tambor das capsulas ficou vazio
-	brne no_add				//se nao, regressa a testes dos sw's.
-	sbr status_flag,empty_flag	//em caso afirmativo, ativa a flag correspondente.
+	d0:
+	    ldi r16, 0xC0         ; Valor para mostrar "0" no display de 7 segmentos               ; Se for igual a 0, vai para d0
+		rjmp fim
+	d1:
+		ldi r16, 0xF9         ; Valor para mostrar "1"
+		rjmp fim
+	d2:
+	   ldi r16, 0xA4         ; Valor para mostrar "2"
+	  rjmp fim
+	d3:
+	  ldi r16, 0xB0         ; Valor para mostrar "3"
+	  rjmp fim
+	d4:
+	  ldi r16, 0x99         ; Valor para mostrar "4"
+	 rjmp fim
+	d5:
+	  ldi r16, 0x92         ; Valor para mostrar "5"
+	  rjmp fim
+	d6:
+		ldi r16, 0x82         ; Valor para mostrar "6"
+		rjmp fim
+//display
+fim:
+	out PORTC, r16        ; Envia o valor para o display (PortC)
+   // pop r16
 	ret
-;==========
-;FUNCOES PARA ATRIBUICAO DE LIMITES AO NUMERO DE CAPSULAS PERMITIDAS NA MAQUINA
-;==========
-check_sw6:
-call delay					//chama delay, para despistar ruido/perturabacoes no sw e garantir que o mesmo esta realmente a ser pressionado
-sbic pind,limit_sw6
+
+VEon:
+	ldi r16,0b01111111
+	out porta,r16
+	ret
+
+
+vaiembora:
+ldi r16,0xC0				//display 0
+	out portc,r16
+
+ldi r16,0b11111110
+	out porta,r16
 ret
-	set_limit6:
-	ldi max_caps,6			//atribui o numero limite de capsulas como 6.
-	ldi min_lim,3			//atribui o valor minimo de capsulas presentes para manter VE ativada.
-	ret
-check_sw4:
-call delay					//chama delay, para despistar ruido/perturabacoes no sw e garantir que o mesmo esta realmente a ser pressionado
-sbic pind,limit_sw4
-ret
-	perform_sw4:
-	cpi num_caps,5			//verifica se axistem no maximo 6 capsulas na maquina
-	brlt set_limit4			//em caso afirmativo inicia mudanca de limite para 4
-	ret						//caso contrario retorna aos testes de sw's.
-	set_limit4:
-	ldi max_caps,4			//define numero maximo de capsulas como sendo 4.
-	ldi min_lim,2			//define numero minimo de capsulas presentes para manter VE.	
-	ret
-check_sw2:
-call delay					//chama delay, para despistar ruido/perturabacoes no sw e garantir que o mesmo esta realmente a ser pressionado
-sbic pind,limit_sw2
-ret
-	perform_sw2:
-	cpi num_caps,3			//verifica se axistem no maximo 2 capsulas na maquina
-	brlt set_limit2			//em caso afirmativo salta para a mudanca de limite de capsulas.
-	ret						//caso contratio regressa a testes de sw's.
-	set_limit2:
-	ldi max_caps,2			//define valor maximo de capsulas como sendo 2.
-	ldi min_lim,1			//define valor a baixo do qual se pode dessativar VE.
-	ret
-;==========
-;FUNCAO DE ENVIO DE VALORES PARA O DISPLAY DE 7 SEGUEMENTOS
-;==========
-print_disp:
-push num_caps
-ldi zh, high(setseg<<1)		//aponta Z para o endereco do espaco de memoria alocado para a tabela de 7seg.
-ldi zl, low(setseg<<1)		//indicando ao compilador que tem de fazer shift a esq. do valor do endereco
-add num_caps, zl			//incrementa zl com o valor pretendido a mostrar
-ld num_caps, z				//carrega o valor apontado
-out portc, num_caps			//faz print para o display
-pop num_caps
-ret
-;==========
-;FUNCAO DE DELAY (EXECUCAO DE TAREFAS DE FORMA A "QUEIMAR" TEMPO)
-;==========
-delay: 
+
+
+
+
+SC:
+sbis PIND, 4
+	rjmp SCpress
+	ldi aux,1
+	rjmp SC
+
+
+SP:
+sbis PIND, 5         ; Verifica se o bit 5 está limpo (palete presente)
+  ret
+  rjmp SP
+
+
+SCpress:
+	cpi aux, 0
+		breq SC
+		ldi aux,0
+		dec valorpeca
+		breq vaiembora
+		call mostrar_pecas	
+		rjmp SCpress	
+
+
+		delay: 
 push r18                                            // guarda na memoria valor de registo r18
 push r19                                            // guarda na memoria valor de registo r19
 push r20                                            // guarda na memoria valor de registo r20
@@ -183,4 +187,3 @@ pop r20                                             // recupera da memoria valor
 pop r19                                             // recupera da memoria valor de registo r19
 pop r18                                             // recupera da memoria valor de registo r18
 ret
-
