@@ -1,140 +1,158 @@
-.def letter_index = r16        ; Registro para armazenar o �ndice da letra atual
-.def blink_flag = r17          ; Registro para armazenar o estado de piscar
-.def delay_counter = r18       ; Registro para contagem de delay
+.def temp = r16
+.def cnt_int = r17
+.def temp_int = r18
+.def num_caps = r19
+.def aux = r20
+.def caps = r25
+.def tempo_total = r23       ; Contador para controlar o tempo total de 3 segundos
 
 .cseg
 .org 0x00                      ; Vetor de Reset
     jmp init
-.org 0x001E
-.org 0x46                      ; In�cio do c�digo principal
+.org 0x1E                      ; Endereço de interrupção para o Timer 0
+    jmp int_tc0
 
-;=====================
-; Tabela de Segmentos para as Letras (setseg)
-;=====================
-setseg: 
-    setseg: 
-    .db 0b01110111, 0b01111100, 0b00111001, 0b01011110, 0b01111001, 0b01110001, 0b00111101, 0b01110110
-    .db 0b00000110, 0b00011110, 0b01110110, 0b00111000, 0b01010101, 0b01010100, 0b00111111, 0b01110011
-    .db 0b01100111, 0b01010000, 0b01101101, 0b01111000, 0b00111110, 0b00101110, 0b01011110, 0b01110110
-    .db 0b01101110, 0b01011011
+.org 0x46                      ; Início do código principal
 
-    ; Correspondente aos caracteres de A at� Z no display de 7 segmentos
+setseg:
+.db 0b11111111, 0b10001000, 0b10000011, 0b11000110, 0b10100001, 0b10000110, 0b10001110, 0b11000010, 0b10001001, 0b11111001, 0b11100001, 0b10001001, 0b11000111, 0b10101010, 0b10101011, 0b11000000, 0b10001100, 0b10011000, 0b10101111, 0b10010010, 0b10000111, 0b11000001, 0b10001001, 0b10100100
 
 init:
-    ldi r16, 0b11111111        ; Configura PORTC (Display) como sa�da
+    ; Configuração inicial dos ports e interrupções
+    ldi r16, 0b11111111        ; Configura PORTC (Display) como saída
     out DDRC, r16
     out PORTC, r16             ; Desliga todos os segmentos do display
 
-    ldi r16, 0b11111100        ; Configura PORTD (Switches) como entrada
+    ldi r16, 0b11000000        ; Configura PORTD para sw's + escolha disp
     out DDRD, r16
+    out PORTD, r16
 
-    ldi letter_index, 0        ; Inicia a roleta na letra "A" (�ndice 0)
-    clr blink_flag             ; Inicialmente, o piscar est� desativado
-
-    ; Configura o stack pointer
+    ; Configuração do stack pointer
     ldi r24, low(RAMEND)
     out SPL, r24
     ldi r25, high(RAMEND)
     out SPH, r25
 
-main_loop:
-    sbic PIND, 0               ; Verifica se SW1 (Start) foi pressionado
-    rjmp start_roulette
+    ; Inicializações dos contadores
+    ldi num_caps, 0
 
-    sbic PIND, 1               ; Verifica se SW2 (Stop) foi pressionado
-    rjmp stop_and_blink
+    ; Configuração do temporizador para 5ms
+    ldi temp, 77               ; Temporização base de 5ms
+    out OCR0, temp
 
-    rjmp main_loop
+    ldi cnt_int, 40            ; Contador para 200ms
 
-start_roulette:
-    ; Mostra as letras de A at� Z no display a cada 200ms
-    call display_letter
-    call delay_200ms
+    ldi temp, 0b00001111       ; TC0 em modo CTC, prescaler 1024, OC0 off
+    out TCCR0, temp
 
-    ; Incrementa o �ndice da letra
-    inc letter_index
-    cpi letter_index, 26        ; Se passar da letra Z (�ndice 25), reinicia para A (�ndice 0)
-    brlo main_loop
-    clr letter_index
-    rjmp main_loop
+    ; Ativar interrupção do TC0
+    in r16, TIMSK
+    ori r16, 0b00000010
+    out TIMSK, r16
+    sei                        ; Habilitar interrupções globais
 
-stop_and_blink:
-    ; Pisca a letra atual durante 3 segundos, com frequ�ncia de 1 Hz
-    ldi delay_counter, 6        ; Piscar por 3 segundos (6 ciclos de 500ms)
-blink_loop:
-    sbic PIND, 1               ; Verifica se SW2 (Stop) foi pressionado novamente
-    rjmp resume_roulette
+main:
+    call sw1                   ; Verifica se há presença de palete
 
-    com blink_flag             ; Inverte o estado de piscar
-    breq turn_off_display
-    call display_letter        ; Liga o display
-    rjmp blink_delay
+roleta:
+    brtc roleta                ; Espera até que o temporizador altere a flag
+    clt                        ; Limpa a flag do temporizador
 
-turn_off_display:
-    ldi r16, 0xFF              ; Desliga todos os segmentos do display
+    inc num_caps               ; Incrementa o contador de letras
+    cpi num_caps, 23           ; Verifica se chegou ao limite de letras
+    breq zerarcaps
+
+    call display               ; Atualiza o display com a letra atual
+
+    in r21, PIND
+    cpi r21, 0b11111101        ; Verifica se SW2 foi pressionado
+    breq piscar                ; Inicia o ciclo de piscar se pressionado
+
+    rjmp roleta                ; Continua a roleta
+
+zerarcaps:
+    ldi num_caps, 0            ; Reinicia o contador se atingir o limite
+    rjmp roleta
+
+display:
+    ; Carrega o valor do segmento para exibir a letra correta
+    ldi zh, high(setseg<<1)     
+    ldi zl, low(setseg<<1)
+    add zl, num_caps           
+
+    lpm r16, z                 ; Lê o valor do segmento para exibir
+    out PORTC, r16             ; Envia o valor ao display
+    mov aux, r16               ; Guarda o valor atual no auxiliar
+
+    ret
+
+piscar:
+    call int_tc03s             ; Inicia temporizador de 500ms para piscar
+    clr tempo_total            ; Zera o contador para 3 segundos
+
+pisca_loop:
+    brtc pisca_loop            ; Espera pelo temporizador de 500ms
+    clt                        ; Limpa a flag do temporizador
+    
+    inc tempo_total            ; Incrementa o contador para verificar os 3 segundos
+    
+    cpi tempo_total, 6         ; Verifica se atingiu 3 segundos
+    breq parar_piscar          ; Se sim, para de piscar e fixa a letra
+    
+    in r21, PIND
+    cpi r21, 0b11111101        ; Verifica se SW2 foi pressionado novamente
+    breq continuar_ciclo       ; Volta ao ciclo principal se pressionado
+    
+    cp r16, aux
+    breq apaga                 ; Alterna entre apagar e exibir
+    mov r16, aux
+    out PORTC, r16
+    inc caps
+    rjmp pisca_loop            ; Volta a piscar enquanto tempo < 3 segundos
+
+apaga:
+    ldi r16, 0b11111111        ; Apaga o display
+    out PORTC, r16
+    rjmp pisca_loop
+
+parar_piscar:
+    mov r16, aux               ; Fixa a última letra exibida no display
+    out PORTC, r16
+    jmp fim                    ; Fim do ciclo de piscar
+
+continuar_ciclo:
+    mov r16, aux
     out PORTC, r16
 
-blink_delay:
-    call delay_500ms           ; Atraso de 500ms para controlar o piscar
-    dec delay_counter
-    brne blink_loop            ; Continua piscando at� que 3 segundos passem
-    clr blink_flag
-    rjmp main_loop
+    call int_tc0               ; Restaura o temporizador original
+    rjmp roleta                ; Volta ao loop da roleta
 
-resume_roulette:
-    clr blink_flag
-    rjmp main_loop
-
-;=====================
-; Fun��es Auxiliares
-;=====================
-
-display_letter:
-    ldi ZL, low(setseg)        ; Carrega a parte baixa do endere�o da tabela setseg no registrador ZL
-    ldi ZH, high(setseg)       ; Carrega a parte alta do endere�o da tabela setseg no registrador ZH
-    add ZL, letter_index       ; Adiciona o �ndice da letra ao registrador ZL para buscar a letra correta
-    ld r24, Z                  ; Carrega o valor da tabela no registrador r24
-    out PORTC, r24             ; Envia o valor para o display
+sw1:
+    sbis PIND, 0               ; Verifica se o botão para presença de palete está pressionado
     ret
+    rjmp sw1
 
-delay_200ms:
-    push r19                   ; Guarda o valor de r19
-    push r20                   ; Guarda o valor de r20
-    push r21                   ; Guarda o valor de r21
-    ldi r20, 100                                                    
-ciclodelay0:
-    ldi r19, 110                                       
-ciclodelay1:
-    ldi r18, 96                                      
-ciclodelay2:
-    dec r18
-    brne ciclodelay2
-    dec r19
-    brne ciclodelay1
-    dec r20
-    brne ciclodelay0
-    pop r21                   ; Recupera o valor de r21
-    pop r20                   ; Recupera o valor de r20
-    pop r19                   ; Recupera o valor de r19
-    ret
+int_tc0:
+    in temp_int, SREG
+    dec cnt_int
+    brne f_int
+    ldi cnt_int, 40            ; Restaura o contador para 200ms
+    out SREG, temp_int
+    set                        ; Seta a flag para reiniciar a roleta
+    reti
 
-delay_500ms:
-    push r19                   ; Guarda o valor de r19
-    push r20                   ; Guarda o valor de r20
-    push r21                   ; Guarda o valor de r21
-    ldi r20, 200                                                    
-ciclodelay3:
-    ldi r19, 199                                       
-ciclodelay4:
-    ldi r18, 66                                      
-ciclodelay5:
-    dec r18
-    brne ciclodelay5
-    dec r19
-    brne ciclodelay4
-    dec r20
-    brne ciclodelay3
-    pop r21                   ; Recupera o valor de r21
-    pop r20                   ; Recupera o valor de r20
-    pop r19                   ; Recupera o valor de r19
-    ret
+f_int:
+    out SREG, temp_int
+    reti
+
+int_tc03s:
+    in temp_int, SREG
+    dec cnt_int
+    brne f_int
+    ldi cnt_int, 125           ; Temporização de 500ms para piscar
+    out SREG, temp_int
+    set                        ; Seta a flag para piscar
+    reti
+
+fim:
+    rjmp fim                   ; Ciclo final do programa
