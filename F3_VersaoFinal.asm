@@ -1,4 +1,5 @@
 
+
 .cseg
 .org 0x00
     rjmp main             ; Início do programa, salta para a rotina main
@@ -7,49 +8,56 @@
 setseg: .db 0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90
 
 main:
-    ldi r16, 0xFF
+	ldi r18, 0
+    ldi r16, 0b11111111
     out DDRA, r16         ; Define o PortA como saída (para LEDs e display)
-    ldi r16, 0x00
-    out DDRD, r16         ; Define o PortD como entrada (para switches)
-
+    ldi r16,0b11000000
+	out ddrd,r16			//portD sw's + escolha disp - entrada + saida
+	out portd,r16
+	ldi r16, 0b11111111
+	out DDRC, r16
     ; Inicializa o stack pointer (SP)
     ldi r16, 0xFF
     out SPL, r16          
     ldi r16, 0x10
     out SPH, r16          
 
-    ldi r16, 0b00100000
-    out PORTA, r16        ; Liga o motor (LED) inicialmente
+   ldi r16,0b11111110		//ligar motor(led1)
+	out porta,r16       ; Liga o motor (LED) inicialmente
+	ldi r16,0xC0				//display 0
+	out portc,r16
+
 
 loop:
     ; Verifica se o sensor SP detecta uma palete (bit PD0)
-    sbis PIND, 0          ; Verifica se o bit 0 está limpo (palete presente)
-    rcall parar_motor      ; Se estiver, para o motor (LED)
+    sbis PIND, 5          ; Verifica se o bit 5 está limpo (palete presente)
+    call parar_motor      ; Se estiver, para o motor (LED)
+rjmp loop
 
+pecas:
     ; Seleciona o número de peças a transferir
     rcall selecionar_pecas
 
     ; Transfere as peças selecionadas
     rcall transferir_pecas
 
-    ; Reinicia o ciclo
-    rjmp loop
-
 
 parar_motor:
     cbi PORTA, 5          ; Desliga o motor (desativa LED no PA5)
-    ret
+	ldi r16,0b11111111
+	out porta, r16
+    rjmp pecas
 
 
 selecionar_pecas:
     ; Verifica cada switch para determinar o número de peças
-    sbis PIND, 1          ; Verifica se o switch PD1 está pressionado
+    sbis PIND, 0          ; Verifica se o switch PD1 está pressionado
     ldi r18, 2            ; Se estiver, seleciona 2 peças
 
-    sbis PIND, 2          ; Verifica se o switch PD2 está pressionado
+    sbis PIND, 1          ; Verifica se o switch PD2 está pressionado
     ldi r18, 4            ; Se estiver, seleciona 4 peças
 
-    sbis PIND, 3          ; Verifica se o switch PD3 está pressionado
+    sbis PIND, 2          ; Verifica se o switch PD3 está pressionado
     ldi r18, 6            ; Se estiver, seleciona 6 peças
 
     ldi r19, 0            ; Inicializa a contagem de peças para 0
@@ -58,18 +66,18 @@ selecionar_pecas:
 
 ; Função para transferir as peças
 transferir_pecas:
-    sbi PORTA, 6          ; Abre a válvula VE (LED no PA6)
+    sbi PORTA, 7          ; Abre a válvula VE (LED no PA6)
     rcall mostrar_pecas   ; Mostra o número inicial de peças no display
 
 transfer_loop:
-    sbis PIND, 1          ; Espera pelo sensor SC (verifica o switch PD1)
+    sbis PIND, 4          ; Espera pelo sensor SC 
     rcall delay           ; Introduz um atraso para evitar múltiplos sinais
 
     inc r19               ; Incrementa a contagem de peças transferidas
     cp r19, r18           ; Compara a contagem com o número de peças selecionado
     brne transfer_loop    ; Continua se ainda não transferiu todas as peças
 
-    cbi PORTA, 6          ; Fecha a válvula VE (desliga o LED no PA6)
+    cbi PORTA, 7          ; Fecha a válvula VE (desliga o LED no PA6)
     ret
 
 ; Função para mostrar o número de peças no display de 7 segmentos
