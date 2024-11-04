@@ -129,7 +129,7 @@ continuar_ciclo:
     rjmp roleta                ; Volta ao loop da roleta
 
 sw1:
-    sbis PIND, 0               ; Verifica se o botão para presença de palete está pressionado
+    sbis PIND, 0               
     ret
     rjmp sw1
 
