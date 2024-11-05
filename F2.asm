@@ -24,11 +24,12 @@ loop:
     cpi r16, 0b11111110        ; Verifica se SW1 foi pressionado
     breq sequenciar
 
-    cpi r16, 0b11011111        ; Verifica se SW6 foi pressionado
-    breq desligar
+    call sw6
 
     ; Se nenhum switch foi pressionado, continua no loop
     rjmp loop                  
+
+
 
 sequenciar:
     ; Ligar LEDs de D1 a D8 (2s de delay)
@@ -105,6 +106,11 @@ desligar:
     out PORTC, r16
     rjmp loop                  ; Volta para o loop principal
 
+sw6:
+	
+	sbis PINA,5        ; Verifica se SW6 foi pressionado
+    rjmp desligar
+	ret
 
 delay:
     push r18
@@ -115,7 +121,8 @@ delay:
 ciclo0:
     mov r19, r26               
 ciclo1:
-    mov r18, r27               
+    mov r18, r27
+	call sw6    /////verificar sw6               
 ciclo2:
     dec r18
     brne ciclo2
