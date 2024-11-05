@@ -97,7 +97,7 @@ pisca_loop:
     
     inc tempo_total            ; Incrementa o contador para verificar os 3 segundos
     
-    cpi tempo_total, 12         ; Verifica se atingiu 3 segundos
+    cpi tempo_total, 15         ; Verifica se atingiu 3 segundos
     breq parar_piscar          ; Se sim, para de piscar e fixa a letra
     
     in r21, PIND
@@ -150,7 +150,7 @@ int_tc03s:
     in temp_int, SREG
     dec cnt_int
     brne f_int
-    ldi cnt_int, 250           ; Temporização de 500ms para piscar
+    ldi cnt_int, 125           ; Temporização de 500ms para piscar
     out SREG, temp_int
     set                        ; Seta a flag para piscar
     reti
