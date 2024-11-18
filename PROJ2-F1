@@ -1,0 +1,213 @@
+Objetivo do Funcionamento 1
+Controlar a velocidade de um motor DC utilizando PWM e mostrar o valor percentual da velocidade no display. Além disso, implementar controles adicionais para inverter o sentido de rotação e parar o motor.
+
+Descrição do Funcionamento
+Controle de Velocidade via Interruptores:
+
+Existem quatro interruptores (SW1, SW2, SW3, SW4), cada um correspondendo a uma velocidade fixa:
+SW1: 25%
+SW2: 50%
+SW3: 70%
+SW4: 90%
+O valor percentual da velocidade selecionada é exibido no display.
+Inversão de Sentido:
+
+SW5 inverte o sentido de rotação do motor.
+Antes da inversão, o motor deve parar por 250 ms.
+Paragem do Motor:
+
+SW6 é responsável por parar o motor.
+Configuração de Hardware
+Portas e Pinos Utilizados:
+
+PWM (PB7): Saída de PWM para controle de velocidade.
+Direção (PB5 e PB6): Define o sentido de rotação.
+PB5: Dir0
+PB6: Dir1
+Interruptores (SW1 a SW6): Controlam a velocidade, paragem, e inversão.
+Temporizadores Recomendados:
+
+TC0: Usado para temporização base de 5 ms (modo CTC).
+TC2: Usado para gerar o sinal PWM em frequência de aproximadamente 500 Hz.
+Passos Detalhados para Implementação
+1. Configuração do Temporizador TC2 (PWM)
+O PWM (Pulse Width Modulation) controla a velocidade do motor variando o ciclo ativo. Configurações básicas:
+
+Modo: Fast PWM ou Phase Correct PWM.
+Frequência do PWM: Aproximadamente 500 Hz.
+Saída: Conectada ao pino PB7 (OC2).
+2. Configuração do Temporizador TC0 (Temporização)
+O TC0 é usado para obter uma base de tempo de 5 ms.
+
+Configuração em modo CTC (Clear Timer on Compare Match).
+Calcule o valor do registrador OCR0 para gerar um período de 5 ms.
+3. Leitura dos Interruptores
+Cada interruptor (SW1 a SW6) deve ser lido para determinar a ação:
+
+SW1 a SW4: Ajustar o duty cycle do PWM.
+SW5: Alterar o sentido de rotação (inclui paragem temporária de 250 ms antes de inverter).
+SW6: Colocar o duty cycle em 0% (parar o motor).
+4. Display dos Valores
+Exiba os seguintes valores no display:
+
+Velocidade em porcentagem.
+Sinal (-) no display 2 se o motor estiver em sentido anti-horário.
+5. Inversão de Sentido
+A direção do motor é controlada pelos pinos:
+
+PB5 (Dir0).
+PB6 (Dir1). Alterar esses pinos para trocar entre horário e anti-horário.
+6. Temporização de Paragem
+Implemente uma rotina de espera de 250 ms antes de inverter o sentido. Use o temporizador TC0 para esta função.
+
+Exemplo de Fluxo de Controle
+O sistema inicia com o motor parado e o display desligado.
+Quando SW1 é pressionado:
+O duty cycle do PWM é ajustado para 25%.
+"25" é exibido no display.
+Se SW5 for pressionado:
+O motor para por 250 ms.
+O sentido de rotação é invertido.
+Se o motor estiver em sentido anti-horário, o display mostra "25-" (por exemplo).
+Pressionar SW6 zera o duty cycle, parando o motor completamente.
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+#include <avr/io.h>
+#include <util/delay.h>
+
+#define F_CPU 16000000UL // Frequência do microcontrolador
+
+// Pinos dos switches no PORTA
+#define SW1 (PINA & (1 << PA0))
+#define SW2 (PINA & (1 << PA1))
+#define SW3 (PINA & (1 << PA2))
+#define SW4 (PINA & (1 << PA3))
+#define SW5 (PINA & (1 << PA4))
+#define SW6 (PINA & (1 << PA5))
+
+// Definições de pinos para os displays
+#define DISPLAY_PORT PORTC
+#define DISPLAY_DDR DDRC
+
+void init_pwm() {
+    // Configuração do Timer/Counter 2 (TC2) para Fast PWM
+    TCCR2 = (1 << WGM20) | (1 << WGM21) | (1 << COM21) | (1 << CS21); // Fast PWM, Prescaler = 8
+    DDRB |= (1 << PB7); // Configura PB7 como saída para o PWM
+}
+
+void set_pwm_duty_cycle(uint8_t duty) {
+    OCR2 = (duty * 255) / 100; // Ajusta o duty cycle do PWM
+}
+
+void init_timer_ctc() {
+    // Configuração do Timer/Counter 0 (TC0) para CTC (temporização base 5 ms)
+    TCCR0 = (1 << WGM01) | (1 << CS01) | (1 << CS00); // Modo CTC, Prescaler = 64
+    OCR0 = 124; // Para CLK = 16MHz, Prescaler = 64, OCR0 = 5ms
+    TIMSK |= (1 << OCIE0); // Habilita interrupção de Compare Match
+}
+
+void init_pins() {
+    // Configura PB5 e PB6 como saídas para direção do motor
+    DDRB |= (1 << PB5) | (1 << PB6);
+    PORTB &= ~((1 << PB5) | (1 << PB6)); // Inicializa o motor parado
+
+    // Configura os switches no PORTA como entradas com pull-up
+    DDRA &= ~((1 << PA0) | (1 << PA1) | (1 << PA2) | (1 << PA3) | (1 << PA4) | (1 << PA5));
+    PORTA |= ((1 << PA0) | (1 << PA1) | (1 << PA2) | (1 << PA3) | (1 << PA4) | (1 << PA5));
+
+    // Configura o PORTC para o display
+    DISPLAY_DDR = 0xFF; // Todo o PORTC como saída
+    DISPLAY_PORT = 0x00; // Inicializa display desligado
+}
+
+void stop_motor() {
+    set_pwm_duty_cycle(0); // Para o motor
+    _delay_ms(250);        // Aguarda 250 ms antes de inverter
+}
+
+void set_motor_direction(uint8_t clockwise) {
+    if (clockwise) {
+        PORTB = (PORTB & ~(1 << PB6)) | (1 << PB5); // Dir0 = 1, Dir1 = 0
+    } else {
+        PORTB = (PORTB & ~(1 << PB5)) | (1 << PB6); // Dir0 = 0, Dir1 = 1
+    }
+}
+
+void display_speed(uint8_t speed, uint8_t direction) {
+    // Tabela de segmentos para os dígitos (7 segmentos comum cátodo)
+    uint8_t segment_table[] = {
+        0x3F, // 0
+        0x06, // 1
+        0x5B, // 2
+        0x4F, // 3
+        0x66, // 4
+        0x6D, // 5
+        0x7D, // 6
+        0x07, // 7
+        0x7F, // 8
+        0x6F  // 9
+    };
+
+    uint8_t tens = speed / 10;
+    uint8_t units = speed % 10;
+
+    // Exibe "-" no segundo display (anti-horário)
+    if (!direction) {
+        DISPLAY_PORT = 0x40; // Segmento "g" aceso
+        _delay_ms(5);
+    }
+
+    // Exibe o dígito das dezenas no terceiro display
+    DISPLAY_PORT = segment_table[tens];
+    _delay_ms(5);
+
+    // Exibe o dígito das unidades no quarto display
+    DISPLAY_PORT = segment_table[units];
+    _delay_ms(5);
+}
+
+int main() {
+    uint8_t speed = 0;      // Velocidade inicial (%)
+    uint8_t direction = 1;  // 1: Horário, 0: Anti-horário
+
+    init_pwm();
+    init_timer_ctc();
+    init_pins();
+
+    while (1) {
+        // Ajusta a velocidade com base nos switches SW1-SW4
+        if (!(SW1)) {
+            speed = 25;
+        } else if (!(SW2)) {
+            speed = 50;
+        } else if (!(SW3)) {
+            speed = 70;
+        } else if (!(SW4)) {
+            speed = 90;
+        }
+
+        // Inverte a direção com SW5
+        if (!(SW5)) {
+            stop_motor();             // Para o motor por 250 ms
+            direction = !direction;  // Inverte a direção
+            set_motor_direction(direction);
+        }
+
+        // Para o motor com SW6
+        if (!(SW6)) {
+            speed = 0;  // Velocidade zero
+        }
+
+        // Ajusta o PWM para a velocidade atual
+        set_pwm_duty_cycle(speed);
+
+        // Atualiza o display
+        display_speed(speed, direction);
+    }
+
+    return 0;
+}
+
