@@ -1,213 +1,251 @@
-Objetivo do Funcionamento 1
-Controlar a velocidade de um motor DC utilizando PWM e mostrar o valor percentual da velocidade no display. Além disso, implementar controles adicionais para inverter o sentido de rotação e parar o motor.
-
-Descrição do Funcionamento
-Controle de Velocidade via Interruptores:
-
-Existem quatro interruptores (SW1, SW2, SW3, SW4), cada um correspondendo a uma velocidade fixa:
-SW1: 25%
-SW2: 50%
-SW3: 70%
-SW4: 90%
-O valor percentual da velocidade selecionada é exibido no display.
-Inversão de Sentido:
-
-SW5 inverte o sentido de rotação do motor.
-Antes da inversão, o motor deve parar por 250 ms.
-Paragem do Motor:
-
-SW6 é responsável por parar o motor.
-Configuração de Hardware
-Portas e Pinos Utilizados:
-
-PWM (PB7): Saída de PWM para controle de velocidade.
-Direção (PB5 e PB6): Define o sentido de rotação.
-PB5: Dir0
-PB6: Dir1
-Interruptores (SW1 a SW6): Controlam a velocidade, paragem, e inversão.
-Temporizadores Recomendados:
-
-TC0: Usado para temporização base de 5 ms (modo CTC).
-TC2: Usado para gerar o sinal PWM em frequência de aproximadamente 500 Hz.
-Passos Detalhados para Implementação
-1. Configuração do Temporizador TC2 (PWM)
-O PWM (Pulse Width Modulation) controla a velocidade do motor variando o ciclo ativo. Configurações básicas:
-
-Modo: Fast PWM ou Phase Correct PWM.
-Frequência do PWM: Aproximadamente 500 Hz.
-Saída: Conectada ao pino PB7 (OC2).
-2. Configuração do Temporizador TC0 (Temporização)
-O TC0 é usado para obter uma base de tempo de 5 ms.
-
-Configuração em modo CTC (Clear Timer on Compare Match).
-Calcule o valor do registrador OCR0 para gerar um período de 5 ms.
-3. Leitura dos Interruptores
-Cada interruptor (SW1 a SW6) deve ser lido para determinar a ação:
-
-SW1 a SW4: Ajustar o duty cycle do PWM.
-SW5: Alterar o sentido de rotação (inclui paragem temporária de 250 ms antes de inverter).
-SW6: Colocar o duty cycle em 0% (parar o motor).
-4. Display dos Valores
-Exiba os seguintes valores no display:
-
-Velocidade em porcentagem.
-Sinal (-) no display 2 se o motor estiver em sentido anti-horário.
-5. Inversão de Sentido
-A direção do motor é controlada pelos pinos:
-
-PB5 (Dir0).
-PB6 (Dir1). Alterar esses pinos para trocar entre horário e anti-horário.
-6. Temporização de Paragem
-Implemente uma rotina de espera de 250 ms antes de inverter o sentido. Use o temporizador TC0 para esta função.
-
-Exemplo de Fluxo de Controle
-O sistema inicia com o motor parado e o display desligado.
-Quando SW1 é pressionado:
-O duty cycle do PWM é ajustado para 25%.
-"25" é exibido no display.
-Se SW5 for pressionado:
-O motor para por 250 ms.
-O sentido de rotação é invertido.
-Se o motor estiver em sentido anti-horário, o display mostra "25-" (por exemplo).
-Pressionar SW6 zera o duty cycle, parando o motor completamente.
-
-
-------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
 #include <avr/io.h>
-#include <util/delay.h>
+#include <avr/interrupt.h>
 
-#define F_CPU 16000000UL // Frequência do microcontrolador
+const unsigned char digitos[]={0xC0,0xF9,0xA4,0xB0,0x99,0x82,0xF8,0x80,0x90,0x88}; 
 
-// Pinos dos switches no PORTA
-#define SW1 (PINA & (1 << PA0))
-#define SW2 (PINA & (1 << PA1))
-#define SW3 (PINA & (1 << PA2))
-#define SW4 (PINA & (1 << PA3))
-#define SW5 (PINA & (1 << PA4))
-#define SW6 (PINA & (1 << PA5))
 
-// Definições de pinos para os displays
-#define DISPLAY_PORT PORTC
-#define DISPLAY_DDR DDRC
 
-void init_pwm() {
-    // Configuração do Timer/Counter 2 (TC2) para Fast PWM
-    TCCR2 = (1 << WGM20) | (1 << WGM21) | (1 << COM21) | (1 << CS21); // Fast PWM, Prescaler = 8
-    DDRB |= (1 << PB7); // Configura PB7 como saída para o PWM
+volatile unsigned char flag5ms;
+
+unsigned char switches;
+unsigned char sw1pressionado;
+unsigned char sw2pressionado;
+unsigned char sw3pressionado;
+unsigned char sw4pressionado;
+unsigned char sw5pressionado;
+unsigned char sw6pressionado;
+unsigned char inv;
+unsigned char cont;
+unsigned char disp1;
+unsigned char disp2;
+unsigned char disp3;
+unsigned char pickdisp;
+unsigned char var;
+
+
+
+void timer5ms(void){
+	
+	OCR0 = 77; //configura TC0 @16MHz
+
+	TCCR0 = 0b00001111; //5ms,prescaler 1024, CTC
+
+	TIMSK |= 0b00000010; //Interrupçao TC0, é a mesma coisa de (TIMSK=TIMSK|0b00000010)
+
+	SREG |= 0x80; //ativa flag I do SREG
+
 }
 
-void set_pwm_duty_cycle(uint8_t duty) {
-    OCR2 = (duty * 255) / 100; // Ajusta o duty cycle do PWM
+void timer2(void){
+	TCCR2 = 0b01100011;    //config PWM PHASE CORRECT, PRESCALER 64
+	
 }
 
-void init_timer_ctc() {
-    // Configuração do Timer/Counter 0 (TC0) para CTC (temporização base 5 ms)
-    TCCR0 = (1 << WGM01) | (1 << CS01) | (1 << CS00); // Modo CTC, Prescaler = 64
-    OCR0 = 124; // Para CLK = 16MHz, Prescaler = 64, OCR0 = 5ms
-    TIMSK |= (1 << OCIE0); // Habilita interrupção de Compare Match
+
+void Inic(void) //Inicializaçoes
+{
+
+	DDRC = 0xFF; //configura o PORTC(Displays) com saidas
+
+	PORTC = 0xFF; //Desliga todos os displays
+
+	DDRA = 0b11000000; //configura o PORTA(switches + selecao displays) como entradas
+
+	PORTA = 0b11000000; //os pinos 6 e 7 sao saidas
+
+	DDRB = 0b11100000;		//config motor 
+	PINB = 0b11111111;
+	PORTB = 0b10000000;		//comeca parado  + PWD ligado
+	
+
+timer5ms();
+timer2();
 }
 
-void init_pins() {
-    // Configura PB5 e PB6 como saídas para direção do motor
-    DDRB |= (1 << PB5) | (1 << PB6);
-    PORTB &= ~((1 << PB5) | (1 << PB6)); // Inicializa o motor parado
+//Rotina de interrupçao TC0
 
-    // Configura os switches no PORTA como entradas com pull-up
-    DDRA &= ~((1 << PA0) | (1 << PA1) | (1 << PA2) | (1 << PA3) | (1 << PA4) | (1 << PA5));
-    PORTA |= ((1 << PA0) | (1 << PA1) | (1 << PA2) | (1 << PA3) | (1 << PA4) | (1 << PA5));
+ISR(TIMER0_COMP_vect)
 
-    // Configura o PORTC para o display
-    DISPLAY_DDR = 0xFF; // Todo o PORTC como saída
-    DISPLAY_PORT = 0x00; // Inicializa display desligado
+{
+
+	flag5ms=1;
+	
 }
 
-void stop_motor() {
-    set_pwm_duty_cycle(0); // Para o motor
-    _delay_ms(250);        // Aguarda 250 ms antes de inverter
+void parado(void){
+	if(PORTB==0b10000000 || PORTB==0b11100000 || PORTB==0b01100000 || PORTB==0b00000000){ //verifica se esta parado
+		PORTB=0b10100000; //define um sentido de movimento
+	}
+	
+	
 }
 
-void set_motor_direction(uint8_t clockwise) {
-    if (clockwise) {
-        PORTB = (PORTB & ~(1 << PB6)) | (1 << PB5); // Dir0 = 1, Dir1 = 0
-    } else {
-        PORTB = (PORTB & ~(1 << PB5)) | (1 << PB6); // Dir0 = 0, Dir1 = 1
-    }
+
+void verify(void){
+	
+	 if(sw1pressionado==1)  //25%
+	 {	disp1=5;
+		 disp2=2;
+		 parado();
+	OCR2 = (25 * 255) / 100; // Ajusta o duty cycle do PWM
+			
+     }
+	 if(sw2pressionado==1) //50%
+	 {	disp1=0;
+		 disp2=5;
+		 parado();
+	OCR2 = (50* 255) / 100; // Ajusta o duty cycle do PWM
+	 }
+	 if(sw3pressionado==1) //70%
+	 { disp1=0;
+		 disp2=7;
+		 parado();
+	OCR2 = (70* 255) / 100; // Ajusta o duty cycle do PWM
+	 }
+	 if(sw4pressionado==1) //90%
+
+	 {disp1=0;
+		 disp2=9;
+		  parado();
+	OCR2 = (90* 255) / 100; // Ajusta o duty cycle do PWM
+	 }
+	 if(sw5pressionado==1) //inverte sentido
+	{	 inv=PORTB;
+		//sentido invertido ou nao
+		if(disp3==1){disp3=0;}
+		if(disp3==0){disp3=1;}
+		
+		while(cont<50){
+		
+		PORTB = 0b00011111 & PORTB;		//motor parado//////////parar motor
+			if(flag5ms==1) //a cada 5 ms
+			{	
+				flag5ms=0;
+				
+				if(cont==49){
+					if(inv==0b10100000){
+						PORTB=0b11000000;
+					}
+					if(inv==0b11000000){
+						PORTB=0b10100000;
+					}
+				
+				}
+				
+				cont++;
+				
+			}
+				
+	
+		 }
+		 cont=0;
+	 }
+	 if(sw6pressionado==1) //para
+	 {disp1=0;
+		 disp2=0;
+	OCR2 = (0* 255) / 100; // Ajusta o duty cycle do PWM
+	PORTB = 0b00011111 & PORTB;		//motor parado
+	 }
+	
+	 
+	
 }
 
-void display_speed(uint8_t speed, uint8_t direction) {
-    // Tabela de segmentos para os dígitos (7 segmentos comum cátodo)
-    uint8_t segment_table[] = {
-        0x3F, // 0
-        0x06, // 1
-        0x5B, // 2
-        0x4F, // 3
-        0x66, // 4
-        0x6D, // 5
-        0x7D, // 6
-        0x07, // 7
-        0x7F, // 8
-        0x6F  // 9
-    };
+void updatedisp(void){
+		if(pickdisp==0){ //dis1
+			PORTA=0b11000000;
+			PORTC=digitos[disp1];
+			
+		pickdisp++;	
+		}
+		if(pickdisp==1){ //dis2
+			PORTA=0b10000000;
+			PORTC=digitos[disp2];
+			
+		pickdisp++;	
+		}
+		if(pickdisp==2){ //disp3
+			PORTA=0b01000000;
+			if(disp3==0){
+				PORTC=0b11111111;
+			}
+			if(disp3==1){
+				PORTC=0b10111111;
+			disp3=0;
+			}
+		pickdisp=0;	
+		}
+		
 
-    uint8_t tens = speed / 10;
-    uint8_t units = speed % 10;
-
-    // Exibe "-" no segundo display (anti-horário)
-    if (!direction) {
-        DISPLAY_PORT = 0x40; // Segmento "g" aceso
-        _delay_ms(5);
-    }
-
-    // Exibe o dígito das dezenas no terceiro display
-    DISPLAY_PORT = segment_table[tens];
-    _delay_ms(5);
-
-    // Exibe o dígito das unidades no quarto display
-    DISPLAY_PORT = segment_table[units];
-    _delay_ms(5);
+	
 }
 
-int main() {
-    uint8_t speed = 0;      // Velocidade inicial (%)
-    uint8_t direction = 1;  // 1: Horário, 0: Anti-horário
+int main(void){
+	
+	Inic();
+	flag5ms=0;
+	pickdisp=0;
+	sw1pressionado= 0;
+	sw2pressionado= 0;
+	sw3pressionado= 0;
+	sw4pressionado= 0;
+	sw5pressionado= 0;
+	sw6pressionado= 0;
 
-    init_pwm();
-    init_timer_ctc();
-    init_pins();
+while(1){
+	
+	switches = PINA & 0b00111111;
+	
+	switch(switches){
+		case 0b00111110: //sw1 foi pressionado
 
-    while (1) {
-        // Ajusta a velocidade com base nos switches SW1-SW4
-        if (!(SW1)) {
-            speed = 25;
-        } else if (!(SW2)) {
-            speed = 50;
-        } else if (!(SW3)) {
-            speed = 70;
-        } else if (!(SW4)) {
-            speed = 90;
-        }
+		sw1pressionado= 1;
 
-        // Inverte a direção com SW5
-        if (!(SW5)) {
-            stop_motor();             // Para o motor por 250 ms
-            direction = !direction;  // Inverte a direção
-            set_motor_direction(direction);
-        }
+		break;
 
-        // Para o motor com SW6
-        if (!(SW6)) {
-            speed = 0;  // Velocidade zero
-        }
+		case 0b00111101: //sw2 foi pressionado
 
-        // Ajusta o PWM para a velocidade atual
-        set_pwm_duty_cycle(speed);
+		sw2pressionado= 1;
 
-        // Atualiza o display
-        display_speed(speed, direction);
-    }
+		break;
 
-    return 0;
+		case 0b00111011: //sw3 foi pressionado
+
+		sw3pressionado= 1;
+
+		break;
+
+		case 0b00110111: //sw4 foi pressionado
+
+		sw4pressionado= 1;
+
+		break;
+		
+		case 0b00101111: //sw5 foi pressionado
+
+		sw5pressionado= 1;
+
+		break;
+		
+		case 0b00011111: //sw6 foi pressionado
+
+		sw6pressionado= 1;
+
+		break;
+	}
+	
+	verify();
+
+sw1pressionado= 0;
+sw2pressionado= 0;
+sw3pressionado= 0;
+sw4pressionado= 0;
+sw5pressionado= 0;
+sw6pressionado= 0;
+
+updatedisp();
+	
 }
 
+
+}
