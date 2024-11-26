@@ -1,7 +1,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-const unsigned char digitos[]={0xC0,0xF9,0xA4,0xB0,0x99,0x82,0xF8,0x80,0x90,0x88}; 
+const unsigned char digitos[]={0xC0,0xF9,0xA4,0xB0,0x99,0x92,0x82,0xF8,0x80,0x90};
 
 
 
@@ -21,7 +21,7 @@ unsigned char disp2;
 unsigned char disp3;
 unsigned char pickdisp;
 unsigned char var;
-
+unsigned char temp;
 
 
 void timer5ms(void){
@@ -53,13 +53,13 @@ void Inic(void) //Inicializaçoes
 
 	PORTA = 0b11000000; //os pinos 6 e 7 sao saidas
 
-	DDRB = 0b11100000;		//config motor 
+	DDRB = 0b11100000;		//config motor
 	PINB = 0b11111111;
 	PORTB = 0b10000000;		//comeca parado  + PWD ligado
 	
 
-timer5ms();
-timer2();
+	timer5ms();
+	timer2();
 }
 
 //Rotina de interrupçao TC0
@@ -83,43 +83,43 @@ void parado(void){
 
 void verify(void){
 	
-	 if(sw1pressionado==1)  //25%
-	 {	disp1=5;
-		 disp2=2;
-		 parado();
-	OCR2 = (25 * 255) / 100; // Ajusta o duty cycle do PWM
-			
-     }
-	 if(sw2pressionado==1) //50%
-	 {	disp1=0;
-		 disp2=5;
-		 parado();
-	OCR2 = (50* 255) / 100; // Ajusta o duty cycle do PWM
-	 }
-	 if(sw3pressionado==1) //70%
-	 { disp1=0;
-		 disp2=7;
-		 parado();
-	OCR2 = (70* 255) / 100; // Ajusta o duty cycle do PWM
-	 }
-	 if(sw4pressionado==1) //90%
+	if(sw1pressionado==1)  //25%
+	{	disp1=5;
+		disp2=2;
+		parado();
+		OCR2 = (25 * 255) / 100; // Ajusta o duty cycle do PWM
+		
+	}
+	if(sw2pressionado==1) //50%
+	{	disp1=0;
+		disp2=5;
+		parado();
+		OCR2 = (50* 255) / 100; // Ajusta o duty cycle do PWM
+	}
+	if(sw3pressionado==1) //70%
+	{ disp1=0;
+		disp2=7;
+		parado();
+		OCR2 = (70* 255) / 100; // Ajusta o duty cycle do PWM
+	}
+	if(sw4pressionado==1) //90%
 
-	 {disp1=0;
-		 disp2=9;
-		  parado();
-	OCR2 = (90* 255) / 100; // Ajusta o duty cycle do PWM
-	 }
-	 if(sw5pressionado==1) //inverte sentido
+	{disp1=0;
+		disp2=9;
+		parado();
+		OCR2 = (90* 255) / 100; // Ajusta o duty cycle do PWM
+	}
+	if(sw5pressionado==1) //inverte sentido
 	{	 inv=PORTB;
 		//sentido invertido ou nao
 		if(disp3==1){disp3=0;}
-		if(disp3==0){disp3=1;}
+		else{disp3=1;}
 		
 		while(cont<50){
-		
-		PORTB = 0b00011111 & PORTB;		//motor parado//////////parar motor
+			
+			PORTB = 0b00011111 & PORTB;		//motor parado//////////parar motor
 			if(flag5ms==1) //a cada 5 ms
-			{	
+			{
 				flag5ms=0;
 				
 				if(cont==49){
@@ -129,59 +129,59 @@ void verify(void){
 					if(inv==0b11000000){
 						PORTB=0b10100000;
 					}
-				
+					
 				}
 				
 				cont++;
 				
 			}
-				
+			
+			
+		}
+		cont=0;
+	}
+	if(sw6pressionado==1) //para
+	{disp1=0;
+		disp2=0;
+		OCR2 = (0* 255) / 100; // Ajusta o duty cycle do PWM
+		PORTB = 0b00011111 & PORTB;		//motor parado
+	}
 	
-		 }
-		 cont=0;
-	 }
-	 if(sw6pressionado==1) //para
-	 {disp1=0;
-		 disp2=0;
-	OCR2 = (0* 255) / 100; // Ajusta o duty cycle do PWM
-	PORTB = 0b00011111 & PORTB;		//motor parado
-	 }
 	
-	 
 	
 }
 
 void updatedisp(void){
-		if(pickdisp==0){ //dis1
-			PORTA=0b11000000;
-			PORTC=digitos[disp1];
-			
-		pickdisp++;	
-		}
-		if(pickdisp==1){ //dis2
-			PORTA=0b10000000;
-			PORTC=digitos[disp2];
-			
-		pickdisp++;	
-		}
-		if(pickdisp==2){ //disp3
-			PORTA=0b01000000;
-			if(disp3==0){
-				PORTC=0b11111111;
-			}
-			if(disp3==1){
-				PORTC=0b10111111;
-			disp3=0;
-			}
-		pickdisp=0;	
-		}
+	if(pickdisp==0){ //dis1
+		PORTA=0b11000000;
+		PORTC=digitos[disp1];
 		
+		pickdisp++;
+	}
+	if(pickdisp==1){ //dis2
+		PORTA=0b10000000;
+		PORTC=digitos[disp2];
+		
+		pickdisp++;
+	}
+	if(pickdisp==2){ //disp3
+		PORTA=0b01000000;
+		if(disp3==0){
+			PORTC=0b11111111;
+		}
+		if(disp3==1){
+			PORTC=0b10111111;
+			
+		}
+		pickdisp=0;
+	}
+	
 
 	
 }
 
 int main(void){
-	
+	temp=0;
 	Inic();
 	flag5ms=0;
 	pickdisp=0;
@@ -192,60 +192,60 @@ int main(void){
 	sw5pressionado= 0;
 	sw6pressionado= 0;
 
-while(1){
-	
-	switches = PINA & 0b00111111;
-	
-	switch(switches){
-		case 0b00111110: //sw1 foi pressionado
-
-		sw1pressionado= 1;
-
-		break;
-
-		case 0b00111101: //sw2 foi pressionado
-
-		sw2pressionado= 1;
-
-		break;
-
-		case 0b00111011: //sw3 foi pressionado
-
-		sw3pressionado= 1;
-
-		break;
-
-		case 0b00110111: //sw4 foi pressionado
-
-		sw4pressionado= 1;
-
-		break;
+	while(1){
 		
-		case 0b00101111: //sw5 foi pressionado
-
-		sw5pressionado= 1;
-
-		break;
+		switches = PINA & 0b00111111;
 		
-		case 0b00011111: //sw6 foi pressionado
+		switch(switches){
+			case 0b00111110: //sw1 foi pressionado
 
-		sw6pressionado= 1;
+			sw1pressionado= 1;
+			
+			break;
 
-		break;
+			case 0b00111101: //sw2 foi pressionado
+
+			sw2pressionado= 1;
+
+			break;
+
+			case 0b00111011: //sw3 foi pressionado
+
+			sw3pressionado= 1;
+
+			break;
+
+			case 0b00110111: //sw4 foi pressionado
+
+			sw4pressionado= 1;
+
+			break;
+			
+			case 0b00101111: //sw5 foi pressionado
+
+			sw5pressionado= 1;
+
+			break;
+			
+			case 0b00011111: //sw6 foi pressionado
+
+			sw6pressionado= 1;
+
+			break;
+		}
+		
+		verify();
+
+		sw1pressionado= 0;
+		sw2pressionado= 0;
+		sw3pressionado= 0;
+		sw4pressionado= 0;
+		sw5pressionado= 0;
+		sw6pressionado= 0;
+
+		updatedisp();
+		
 	}
-	
-	verify();
-
-sw1pressionado= 0;
-sw2pressionado= 0;
-sw3pressionado= 0;
-sw4pressionado= 0;
-sw5pressionado= 0;
-sw6pressionado= 0;
-
-updatedisp();
-	
-}
 
 
 }
