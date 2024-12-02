@@ -1,0 +1,115 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <stdio.h>
+
+const unsigned char digitos[] = {0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90};
+
+volatile unsigned char flag5ms = 0;
+unsigned char modo_funcionamento = 'D'; // Digital por padrão
+unsigned char velocidade = 0;           // Duty cycle em %
+unsigned char sentido = 0;              // 0: horário, 1: anti-horário
+
+void timer5ms(void) {
+    OCR0 = 77;
+    TCCR0 = 0b00001111; // Prescaler 1024, CTC
+    TIMSK |= (1 << OCIE0); // Ativa interrupção do TC0
+}
+
+void timer_pwm(void) {
+    TCCR2 = 0b01100011; // Phase Correct PWM, prescaler 64
+}
+
+void inic(void) {
+    // Configuração USART1
+    UBRR1H = 0;
+    UBRR1L = 207; // 9600 bps
+    UCSR1A = (1 << U2X1);
+    UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);
+    UCSR1C = (1 << USBS1) | (1 << UCSZ11) | (1 << UCSZ10);
+    
+    // Configuração GPIO
+    DDRC = 0xFF; PORTC = 0xFF;  // Displays
+    DDRA = 0b11000000; PORTA = 0b00111111; // Switches e seleção dos displays
+    DDRB = 0b11100000; PORTB = 0b10000000; // Motor
+    
+    // Configuração de temporizadores
+    timer5ms();
+    timer_pwm();
+    
+    sei(); // Ativa interrupções globais
+}
+
+ISR(TIMER0_COMP_vect) {
+    flag5ms = 1;
+}
+
+ISR(USART1_RX_vect) {
+    char recebido = UDR1;
+    if (modo_funcionamento == 'D') {
+        switch (recebido) {
+            case 'P': case 'p': 
+                velocidade = 0;
+                PORTB &= ~(1 << PB7); // Para o motor
+                break;
+            case '1': velocidade = 25; break;
+            case '2': velocidade = 50; break;
+            case '3': velocidade = 70; break;
+            case '4': velocidade = 90; break;
+            case 'I': case 'i': 
+                PORTB &= ~(1 << PB7); // Para o motor
+                _delay_ms(250); // Pausa de 250ms
+                sentido = !sentido;
+                break;
+            case 'B': case 'b': {
+                char buffer[20];
+                sprintf(buffer, "Velocidade: %u%%\r\n", velocidade);
+                send_message(buffer);
+                break;
+            }
+            case 'S': case 's': 
+                modo_funcionamento = 'S'; 
+                break;
+            case 'D': case 'd': 
+                modo_funcionamento = 'D'; 
+                break;
+            default: break;
+        }
+    }
+}
+
+void send_message(char *msg) {
+    for (int i = 0; msg[i] != '\0'; i++) {
+        while (!(UCSR1A & (1 << UDRE1)));
+        UDR1 = msg[i];
+    }
+}
+
+void atualiza_pwm(void) {
+    OCR2 = (velocidade * 255) / 100; // Atualiza duty cycle
+    PORTB = (PORTB & ~(1 << PB5) & ~(1 << PB6)) | (sentido ? (1 << PB6) : (1 << PB5));
+}
+
+void atualiza_display(void) {
+    PORTA = 0b11000000; // Ativa display 1
+    PORTC = digitos[velocidade / 10]; // Dígito das dezenas
+    _delay_ms(5);
+    
+    PORTA = 0b10000000; // Ativa display 2
+    PORTC = digitos[velocidade % 10]; // Dígito das unidades
+    _delay_ms(5);
+    
+    PORTA = 0b01000000; // Ativa display 3
+    PORTC = (modo_funcionamento == 'D') ? 0x88 : 0x86; // 'D' ou 'S'
+    _delay_ms(5);
+}
+
+int main(void) {
+    inic();
+    while (1) {
+        if (flag5ms) {
+            flag5ms = 0;
+            atualiza_display();
+            atualiza_pwm();
+        }
+    }
+}
