@@ -4,7 +4,7 @@
 
 const unsigned char digitos[]={0xC0,0xF9,0xA4,0xB0,0x99,0x92,0x82,0xF8,0x80,0x90};
 
-	
+
 
 typedef struct USARTRX
 {
@@ -12,7 +12,7 @@ typedef struct USARTRX
 	unsigned char status;
 	unsigned char receive: 1;
 	unsigned char error: 1;
-			
+	
 }USARTRX_st;
 
 volatile USARTRX_st rxUSART = {0,0,0,0};
@@ -66,7 +66,6 @@ void Inic(void) //Inicializaçoes
 	UCSR1B = (1<<RXCIE1)|(1<<RXEN1)|(1<<TXEN1);
 	UCSR1C = (1<<USBS1)|(1<<UCSZ11)|(1<<UCSZ10);
 	
-	sei();
 
 	DDRC = 0xFF; //configura o PORTC(Displays) com saidas
 
@@ -83,6 +82,8 @@ void Inic(void) //Inicializaçoes
 
 	timer5ms();
 	timer2();
+	
+	sei();
 }
 
 //Rotina de interrupçao TC0
@@ -99,23 +100,20 @@ ISR(USART1_RX_vect){
 	rxUSART.status = UCSR1A;
 	
 	if ( rxUSART.status & ((1<<FE1) | (1<<DOR1) | (1>>UPE1)))
-		rxUSART.error = 1;
-		
+	rxUSART.error = 1;
+	
 	rxUSART.receiver_buffer = UDR1;
-	rxUSART.receive = 1;		
+	rxUSART.receive = 1;
 }
 
 void send_message(char *buffer){
 	unsigned char i=0;
-	while(buffer[i]!='\0'){
-		while((UCSR1A & 1<<UDRE1)==0){
-			UDR1=buffer[i];
-			i++;
-		}
-		
+	while(buffer[i]!='\0')
+	{
+		while((UCSR1A & 1<<UDRE1)==0);
+		UDR1=buffer[i];
+		i++;	
 	}
-	
-	
 }
 
 
@@ -186,12 +184,12 @@ void verify(void){
 		OCR2 = (90* 255) / 100; // Ajusta o duty cycle do PWM
 	}
 	if(sw5pressionado==1) //inverte sentido
-		
+	
 	{	 inv=PORTB;
 		//sentido invertido ou nao
 		if(disp3==1){disp3=0;}
 		else{disp3=1;
-	}
+		}
 		
 		while(cont<50){
 			
@@ -230,6 +228,26 @@ void verify(void){
 }
 
 
+void receive(void){
+	if (rxUSART.receive == 1)
+	{
+		if(rxUSART.error == 1)
+		{
+			//resolver erros
+			rxUSART.error = 0;
+		}
+		else
+		{
+
+			sprintf(transmit_buffer, "Tecla: %c\r\n", rxUSART.receiver_buffer);
+			send_message(transmit_buffer);
+			
+			
+			
+			valUSART=rxUSART.receiver_buffer;
+	
+}
+
 
 int main(void){
 	temp=0;
@@ -245,83 +263,70 @@ int main(void){
 	sw6pressionado= 0;
 
 	while(1){
-		///////////////////////////////
-		if (rxUSART.receive == 1)
-		{
-			if(rxUSART.error == 1)
-			{
-				//resolver erros
-				rxUSART.error = 0;
-			}
-			else
-				{	
-
-					sprintf(transmit_buffer, "Tecla: %c\r\n", rxUSART.receiver_buffer);
-					send_message(transmit_buffer);
-					////////////////////////////////////////////////////////////////////////////////////////////////
-					valUSART=rxUSART.receiver_buffer;
-					if(valUSART=='d' || valUSART=='D' ){
-						verUSART=0;
-						while(verUSART!=1)
-						
-						
-						switch(valUSART){
-							
-							case 'P':
-
-							case 'p':
-							if(temp==0){sw6pressionado= 1;
-							temp=1;}
-							verUSART=1;
-							break;
-							
-							case '1':
-							if(temp==0){sw1pressionado= 1;
-							temp=1;}
-							verUSART=1;
-							break;
-							
-							case '2':
-							if(temp==0){sw2pressionado= 1;
-							temp=1;}
-							verUSART=1;
-							break;
-							
-							case '3':
-							if(temp==0){sw3pressionado= 1;
-							temp=1;}
-							verUSART=1;
-							break;
+		receive();
+		
+				if(valUSART=='d' || valUSART=='D' ){
+					verUSART=0;
+					while(verUSART!=1){
+					receive;
 					
-							case '4':
-							if(temp==0){sw4pressionado= 1;
-							temp=1;}
-							verUSART=1;
-							break;
-							
-							case 'I':
-					
-							case 'i':
-							if(temp==0){sw5pressionado= 1;
-							temp=1;}
-							verUSART=1;
-							break;
-							
-							case 'B':
-							
-							case 'b':
-							
-							verUSART=1;
-							break;
-							default: temp=0;
-							break;
-						}
+					switch(valUSART){
 						
+						case 'P':
+
+						case 'p':
+						if(temp==0){sw6pressionado= 1;
+						temp=1;}
+						verUSART=1;
+						break;
+						
+						case '1':
+						if(temp==0){sw1pressionado= 1;
+						temp=1;}
+						verUSART=1;
+						break;
+						
+						case '2':
+						if(temp==0){sw2pressionado= 1;
+						temp=1;}
+						verUSART=1;
+						break;
+						
+						case '3':
+						if(temp==0){sw3pressionado= 1;
+						temp=1;}
+						verUSART=1;
+						break;
+						
+						case '4':
+						if(temp==0){sw4pressionado= 1;
+						temp=1;}
+						verUSART=1;
+						break;
+						
+						case 'I':
+						
+						case 'i':
+						if(temp==0){sw5pressionado= 1;
+						temp=1;}
+						verUSART=1;
+						break;
+						
+						case 'B':
+						
+						case 'b':
+						
+						verUSART=1;
+						break;
+						default: temp=0;
+						break;
 					}
 					
-					
-					
-					if(valUSART=='S' || valUSART=='s' ){
+				}
+				}
+				
+				
+				if(valUSART=='S' || valUSART=='s' ){
 					switches = PINA & 0b00111111;
 					
 					switch(switches){
@@ -366,18 +371,18 @@ int main(void){
 					}
 					
 					
-					}
-					
-					
-					/////////////////////////////////////////////////////////////////////////////////////////////
-					
 				}
+				
+				
+				
+				
+			}
 			rxUSART.receive = 0;
 		}
-			
-			
-			
-		//////////////////////////////
+		
+		
+		
+		
 		
 		
 		
