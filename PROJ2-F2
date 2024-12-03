@@ -37,7 +37,7 @@ unsigned char var;
 unsigned char temp;
 unsigned char valUSART;
 unsigned char verUSART;
-
+unsigned char holdopt;
 
 
 void timer5ms(void){
@@ -112,7 +112,7 @@ void send_message(char *buffer){
 	{
 		while((UCSR1A & 1<<UDRE1)==0);
 		UDR1=buffer[i];
-		i++;	
+		i++;
 	}
 }
 
@@ -228,176 +228,186 @@ void verify(void){
 }
 
 
-void receive(void){
-	if (rxUSART.receive == 1)
-	{
-		if(rxUSART.error == 1)
-		{
-			//resolver erros
-			rxUSART.error = 0;
-		}
-		else
-		{
-
-			sprintf(transmit_buffer, "Tecla: %c\r\n", rxUSART.receiver_buffer);
-			send_message(transmit_buffer);
-			
-			
-			
-			valUSART=rxUSART.receiver_buffer;
-	
-}
 
 
-int main(void){
-	temp=0;
-	Inic();
-	verUSART=0;
-	flag5ms=0;
-	pickdisp=0;
-	sw1pressionado= 0;
-	sw2pressionado= 0;
-	sw3pressionado= 0;
-	sw4pressionado= 0;
-	sw5pressionado= 0;
-	sw6pressionado= 0;
 
-	while(1){
-		receive();
-		
-				if(valUSART=='d' || valUSART=='D' ){
-					verUSART=0;
-					while(verUSART!=1){
-					receive;
-					
-					switch(valUSART){
-						
-						case 'P':
+		int main(void){
+			holdopt=0;
+			temp=0;
+			Inic();
+			verUSART=0;
+			flag5ms=0;
+			pickdisp=0;
+			sw1pressionado= 0;
+			sw2pressionado= 0;
+			sw3pressionado= 0;
+			sw4pressionado= 0;
+			sw5pressionado= 0;
+			sw6pressionado= 0;
 
-						case 'p':
-						if(temp==0){sw6pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
+			while(1){
+				
+				
+				if (rxUSART.receive == 1)
+				{
+					if(rxUSART.error == 1)
+					{
+						//resolver erros
+						rxUSART.error = 0;
+					}
+					else
+					{
+
+						sprintf(transmit_buffer, "Tecla: %c\r\n", rxUSART.receiver_buffer);
+						send_message(transmit_buffer);
 						
-						case '1':
-						if(temp==0){sw1pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
 						
-						case '2':
-						if(temp==0){sw2pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
 						
-						case '3':
-						if(temp==0){sw3pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
+						valUSART=rxUSART.receiver_buffer;
 						
-						case '4':
-						if(temp==0){sw4pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-						
-						case 'I':
-						
-						case 'i':
-						if(temp==0){sw5pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-						
-						case 'B':
-						
-						case 'b':
-						
-						verUSART=1;
-						break;
-						default: temp=0;
-						break;
 					}
 					
-				}
-				}
-				
-				
+			
 				if(valUSART=='S' || valUSART=='s' ){
+					verUSART=1;
+				}
+				if(valUSART=='d' || valUSART=='D' ){
+					verUSART=2;
+				}
+			
+				
+					
+				if(verUSART==2){
+					
+						
+						
+						switch(valUSART){
+							
+							case 'P':
+
+							case 'p':
+							sw6pressionado= 1;
+							
+							verUSART=2;
+							
+							break;
+							
+							case '1':
+							sw1pressionado= 1;
+							
+							verUSART=2;
+							break;
+							
+							case '2':
+							sw2pressionado= 1;
+							
+							verUSART=2;
+							break;
+							
+							case '3':
+							sw3pressionado= 1;
+							
+							verUSART=2;
+							break;
+							
+							case '4':
+							sw4pressionado= 1;
+							
+							verUSART=2;
+							break;
+							
+							case 'I':
+							
+							case 'i':
+							sw5pressionado= 1;
+							
+							verUSART=2;
+							break;
+							
+							case 'B':
+							
+							case 'b':
+							
+							verUSART=2;
+							break;
+							
+						}
+						
+					
+				}
+				
+
+				rxUSART.receive = 0;
+				}
+				
+				if(verUSART==1){
+					
 					switches = PINA & 0b00111111;
+					
 					
 					switch(switches){
 						case 0b00111110: //sw1 foi pressionado
 						if(temp==0){sw1pressionado= 1;
 						temp=1;}
-						
+						verUSART=1;
 						break;
 
 						case 0b00111101: //sw2 foi pressionado
 						if(temp==0){sw2pressionado= 1;
 						temp=1;}
-						
+						verUSART=1;
 						break;
 
 						case 0b00111011: //sw3 foi pressionado
 						if(temp==0){sw3pressionado= 1;
 						temp=1;}
-						
+						verUSART=1;
 						break;
 
 						case 0b00110111: //sw4 foi pressionado
 						if(temp==0){sw4pressionado= 1;
 						temp=1;}
-						
+						verUSART=1;
 						break;
 						
 						case 0b00101111: //sw5 foi pressionado
 						if(temp==0){sw5pressionado= 1;
 						temp=1;}
-						
+						verUSART=1;
 						break;
 						
 						case 0b00011111: //sw6 foi pressionado
 						if(temp==0){sw6pressionado= 1;
 						temp=1;}
-						
+						verUSART=1;
 						break;
 						default: temp=0;
 						break;
 						
 					}
 					
-					
 				}
 				
 				
 				
-				
+			verify();
+			updatedisp();
+			sw1pressionado= 0;
+			sw2pressionado= 0;
+			sw3pressionado= 0;
+			sw4pressionado= 0;
+			sw5pressionado= 0;
+			sw6pressionado= 0;
+
+			
+			
+			
+			
 			}
-			rxUSART.receive = 0;
-		}
 		
 		
 		
+			}
 		
-		
-		
-		
-		verify();
-
-		sw1pressionado= 0;
-		sw2pressionado= 0;
-		sw3pressionado= 0;
-		sw4pressionado= 0;
-		sw5pressionado= 0;
-		sw6pressionado= 0;
-
-		updatedisp();
-		
-	}
 
 
-}
