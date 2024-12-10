@@ -16,7 +16,7 @@ typedef struct USARTRX
 }USARTRX_st;
 
 volatile USARTRX_st rxUSART = {0,0,0,0};
-char transmit_buffer[10];
+char transmit_buffer[25];
 
 volatile unsigned char flag5ms;
 
@@ -38,6 +38,9 @@ unsigned char temp;
 unsigned char valUSART;
 unsigned char verUSART;
 unsigned char holdopt;
+unsigned char velo;
+
+
 
 
 void timer5ms(void){
@@ -125,6 +128,9 @@ void parado(void){
 	
 }
 void updatedisp(void){
+	
+	
+	
 	if(pickdisp==0){ //dis1
 		PORTA=0b11000000;
 		PORTC=digitos[disp1];
@@ -138,7 +144,7 @@ void updatedisp(void){
 		
 	}
 	if(pickdisp==2){ //disp3
-		pickdisp=-1;
+		
 		PORTA=0b01000000;
 		if(disp3==0){
 			PORTC=0b11111111;
@@ -149,11 +155,25 @@ void updatedisp(void){
 		}
 		
 	}
+
+	//aparece se é switch ou teclado(d)	
+	if(pickdisp==3){ //disp4
+		pickdisp=-1;
+		if(verUSART==1){
+			PORTA=0b00000000;
+			PORTC=0b10010010;
+		}
+		if(verUSART==2){
+			PORTA=0b00000000;
+			PORTC=0b10100001;
+		}
+	}
 	pickdisp++;
 	
 
-	
+
 }
+
 
 void verify(void){
 	
@@ -162,19 +182,21 @@ void verify(void){
 		disp2=2;
 		parado();
 		OCR2 = (25 * 255) / 100; // Ajusta o duty cycle do PWM
-		
+		velo=25;
 	}
 	if(sw2pressionado==1) //50%
 	{	disp1=0;
 		disp2=5;
 		parado();
 		OCR2 = (50* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=50;
 	}
 	if(sw3pressionado==1) //70%
 	{ disp1=0;
 		disp2=7;
 		parado();
 		OCR2 = (70* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=70;
 	}
 	if(sw4pressionado==1) //90%
 
@@ -182,6 +204,7 @@ void verify(void){
 		disp2=9;
 		parado();
 		OCR2 = (90* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=90;
 	}
 	if(sw5pressionado==1) //inverte sentido
 	
@@ -220,6 +243,7 @@ void verify(void){
 	{disp1=0;
 		disp2=0;
 		OCR2 = (0* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=0;
 		PORTB = 0b00011111 & PORTB;		//motor parado
 	}
 	
@@ -231,183 +255,198 @@ void verify(void){
 
 
 
-		int main(void){
-			holdopt=0;
-			temp=0;
-			Inic();
-			verUSART=0;
-			flag5ms=0;
-			pickdisp=0;
-			sw1pressionado= 0;
-			sw2pressionado= 0;
-			sw3pressionado= 0;
-			sw4pressionado= 0;
-			sw5pressionado= 0;
-			sw6pressionado= 0;
+int main(void){
+	holdopt=0;
+	temp=0;
+	Inic();
+	velo=0;
+	verUSART=0;
+	flag5ms=0;
+	pickdisp=0;
+	sw1pressionado= 0;
+	sw2pressionado= 0;
+	sw3pressionado= 0;
+	sw4pressionado= 0;
+	sw5pressionado= 0;
+	sw6pressionado= 0;
 
-			while(1){
+	while(1){
+	
+			
+		
+		
+		if (rxUSART.receive == 1)
+		{
+			if(rxUSART.error == 1)
+			{
+				//resolver erros
+				rxUSART.error = 0;
+			}
+			else
+			{
+
+				sprintf(transmit_buffer, "Tecla: %c\r\n", rxUSART.receiver_buffer);
+				send_message(transmit_buffer);
 				
 				
-				if (rxUSART.receive == 1)
-				{
-					if(rxUSART.error == 1)
-					{
-						//resolver erros
-						rxUSART.error = 0;
-					}
-					else
-					{
+				
+				valUSART=rxUSART.receiver_buffer;
+				
+			
+			
+			
+			if(valUSART=='S' || valUSART=='s' ){
+				verUSART=1;
+			}
+			if(valUSART=='d' || valUSART=='D' ){
+			
+				verUSART=2;
+			}
+		
+			
+			if(verUSART==2){
+				
+				
+				
+				switch(valUSART){
+					
+					case 'P':
 
-						sprintf(transmit_buffer, "Tecla: %c\r\n", rxUSART.receiver_buffer);
+					case 'p':
+					
+					sw6pressionado= 1;
+					
+					verUSART=2;
+					
+					break;
+					
+					case '1':
+					sw1pressionado= 1;
+					
+					verUSART=2;
+					break;
+					
+					case '2':
+					sw2pressionado= 1;
+					
+					verUSART=2;
+					break;
+					
+					case '3':
+					sw3pressionado= 1;
+					
+					verUSART=2;
+					break;
+					
+					case '4':
+					sw4pressionado= 1;
+					
+					verUSART=2;
+					break;
+					
+					case 'I':
+					
+					case 'i':
+					sw5pressionado= 1;
+					
+					verUSART=2;
+					break;
+					
+					case 'B':
+					
+					case 'b':
+					
+						sprintf(transmit_buffer, "Velocidade: %d %%  \r\n",velo);
 						send_message(transmit_buffer);
 						
-						
-						
-						valUSART=rxUSART.receiver_buffer;
-						
-					}
-					
-			
-				if(valUSART=='S' || valUSART=='s' ){
-					verUSART=1;
-				}
-				if(valUSART=='d' || valUSART=='D' ){
+									
 					verUSART=2;
-				}
+					break;
+					
+					
 			
-				
-					
-				if(verUSART==2){
-					
-						
-						
-						switch(valUSART){
-							
-							case 'P':
-
-							case 'p':
-							sw6pressionado= 1;
-							
-							verUSART=2;
-							
-							break;
-							
-							case '1':
-							sw1pressionado= 1;
-							
-							verUSART=2;
-							break;
-							
-							case '2':
-							sw2pressionado= 1;
-							
-							verUSART=2;
-							break;
-							
-							case '3':
-							sw3pressionado= 1;
-							
-							verUSART=2;
-							break;
-							
-							case '4':
-							sw4pressionado= 1;
-							
-							verUSART=2;
-							break;
-							
-							case 'I':
-							
-							case 'i':
-							sw5pressionado= 1;
-							
-							verUSART=2;
-							break;
-							
-							case 'B':
-							
-							case 'b':
-							
-							verUSART=2;
-							break;
-							
-						}
-						
-					
-				}
-				
-
-				rxUSART.receive = 0;
-				}
-				
-				if(verUSART==1){
-					
-					switches = PINA & 0b00111111;
-					
-					
-					switch(switches){
-						case 0b00111110: //sw1 foi pressionado
-						if(temp==0){sw1pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-
-						case 0b00111101: //sw2 foi pressionado
-						if(temp==0){sw2pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-
-						case 0b00111011: //sw3 foi pressionado
-						if(temp==0){sw3pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-
-						case 0b00110111: //sw4 foi pressionado
-						if(temp==0){sw4pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-						
-						case 0b00101111: //sw5 foi pressionado
-						if(temp==0){sw5pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-						
-						case 0b00011111: //sw6 foi pressionado
-						if(temp==0){sw6pressionado= 1;
-						temp=1;}
-						verUSART=1;
-						break;
-						default: temp=0;
-						break;
-						
-					}
-					
 				}
 				
 				
+			}
+			}
+
+			rxUSART.receive = 0;
+		}
+		
+		if(verUSART==1){
+			
+			switches = PINA & 0b00111111;
+			
+			
+			switch(switches){
+				case 0b00111110: //sw1 foi pressionado
+				if(temp==0){sw1pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+
+				case 0b00111101: //sw2 foi pressionado
+				if(temp==0){sw2pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+
+				case 0b00111011: //sw3 foi pressionado
+				if(temp==0){sw3pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+
+				case 0b00110111: //sw4 foi pressionado
+				if(temp==0){sw4pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
 				
-			verify();
+				case 0b00101111: //sw5 foi pressionado
+				if(temp==0){sw5pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+				
+				case 0b00011111: //sw6 foi pressionado
+				if(temp==0){sw6pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+				default: temp=0;
+				break;
+				
+			}
+			
+		}
+		
+		
+		
+		verify();
+		
+		
+			
 			updatedisp();
-			sw1pressionado= 0;
-			sw2pressionado= 0;
-			sw3pressionado= 0;
-			sw4pressionado= 0;
-			sw5pressionado= 0;
-			sw6pressionado= 0;
+			
+			
+		
+		
+		sw1pressionado= 0;
+		sw2pressionado= 0;
+		sw3pressionado= 0;
+		sw4pressionado= 0;
+		sw5pressionado= 0;
+		sw6pressionado= 0;
 
-			
-			
-			
-			
-			}
 		
 		
 		
-			}
 		
-
+	}
+	
+	
+	
+}
 
