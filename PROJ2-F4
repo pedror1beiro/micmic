@@ -1,0 +1,204 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+const unsigned char digitos[]={0xC0,0xF9,0xA4,0xB0,0x99,0x92,0x82,0xF8,0x80,0x90};
+
+volatile unsigned char flag5ms;
+unsigned char switches;
+unsigned char sw1pressionado;
+unsigned char sw2pressionado;
+unsigned char sw3pressionado;
+unsigned char sw4pressionado;
+unsigned char sw5pressionado;
+unsigned char sw6pressionado;
+unsigned char inv;
+unsigned char cont;
+unsigned char disp1;
+unsigned char disp2;
+unsigned char disp3;
+unsigned char disp4;
+unsigned char pickdisp;
+unsigned char var;
+unsigned char temp;
+volatile int cont_rot = 0;
+volatile int cont_rot_ant = 0;
+volatile unsigned char flag_1s = 0;
+
+void timer5ms(void){
+	OCR0 = 77; // configura TC0 @16MHz
+	TCCR0 = 0b00001111; // 5ms, prescaler 1024, CTC
+	TIMSK |= 0b00000010; // Interrupção TC0
+	SREG |= 0x80; // ativa flag I do SREG
+}
+
+void timer2(void){
+	TCCR2 = 0b01100011;    // config PWM PHASE CORRECT, PRESCALER 64
+}
+
+void configure_external_interrupt(void) {
+	EICRA |= (1 << ISC31); // Falling edge on INT3
+	EIMSK |= (1 << INT3);  // Enable INT3
+	sei();                 // Enable global interrupts
+}
+
+void Inic(void) {
+	DDRC = 0xFF; // configura o PORTC(Displays) com saídas
+	PORTC = 0xFF; // Desliga todos os displays
+	DDRA = 0b11000000; // configura o PORTA(switches + selecao displays) como entradas
+	PORTA = 0b11000000; // os pinos 6 e 7 sao saidas
+	DDRB = 0b11100000; // configura motor
+	PINB = 0b11111111;
+	PORTB = 0b10000000; // comeca parado  + PWD ligado
+
+	timer5ms();
+	timer2();
+	configure_external_interrupt();
+}
+
+ISR(TIMER0_COMP_vect) {
+	flag5ms = 1;
+	static unsigned char count_1s = 0;
+	count_1s++;
+	if (count_1s >= 200) { // 1 segundo (200 x 5ms)
+		flag_1s = 1;
+		count_1s = 0;
+	}
+}
+
+ISR(INT3_vect) {
+	cont_rot++; // Incrementa o contador de pulsos
+}
+
+void parado(void){
+	if(PORTB==0b10000000 || PORTB==0b11100000 || PORTB==0b01100000 || PORTB==0b00000000){ // verifica se esta parado
+		PORTB=0b10100000; // define um sentido de movimento
+	}
+}
+
+void updatedisp(void){
+	if(pickdisp==0){ // dis1
+		PORTA=0b11000000;
+		PORTC=digitos[disp1];
+	}
+	if(pickdisp==1){ // dis2
+		PORTA=0b10000000;
+		PORTC=digitos[disp2];
+	}
+	if(pickdisp==2){ // disp3
+		PORTA=0b01000000;
+		PORTC=digitos[disp3];
+	}
+	if(pickdisp==3){ // disp4
+		pickdisp=-1;
+		PORTA=0b00000000;
+		PORTC=digitos[disp4];
+	}
+	pickdisp++;
+}
+
+void processar_display(int rpm) {
+	disp1 = rpm % 10;
+	disp2 = (rpm / 10) % 10;
+	disp3 = (rpm / 100) % 10;
+	disp4 = (rpm / 1000) % 10;
+}
+
+void verify(void){
+	if(sw1pressionado==1)  { // 25%
+		parado();
+		OCR2 = (25 * 255) / 100; // Ajusta o duty cycle do PWM
+	}
+	if(sw2pressionado==1) { // 50%
+		parado();
+		OCR2 = (50 * 255) / 100; // Ajusta o duty cycle do PWM
+	}
+	if(sw3pressionado==1) { // 70%
+		parado();
+		OCR2 = (70 * 255) / 100; // Ajusta o duty cycle do PWM
+	}
+	if(sw4pressionado==1) { // 90%
+		parado();
+		OCR2 = (90 * 255) / 100; // Ajusta o duty cycle do PWM
+	}
+	if(sw5pressionado==1) { // inverte sentido
+		inv=PORTB;
+		if(disp3==1){disp3=0;} else {disp3=1;}
+		while(cont<50){
+			PORTB = 0b00011111 & PORTB; // motor parado
+			if(flag5ms==1) { // a cada 5 ms
+				updatedisp();
+				flag5ms=0;
+				if(cont==49){
+					if(inv==0b10100000){
+						PORTB=0b11000000;
+					}
+					if(inv==0b11000000){
+						PORTB=0b10100000;
+					}
+				}
+				cont++;
+			}
+		}
+		cont=0;
+	}
+	if(sw6pressionado==1) { // para
+		OCR2 = 0; // Ajusta o duty cycle do PWM
+		PORTB = 0b00011111 & PORTB; // motor parado
+	}
+}
+
+int main(void){
+	temp=0;
+	Inic();
+	flag5ms=0;
+	pickdisp=0;
+	sw1pressionado=0;
+	sw2pressionado=0;
+	sw3pressionado=0;
+	sw4pressionado=0;
+	sw5pressionado=0;
+	sw6pressionado=0;
+
+	while(1){
+		if(flag_1s) {
+			int rpm = cont_rot * 30; // Supondo 1 pulso = 2 rotações e 1s para 30 rotações/minuto
+			cont_rot_ant = cont_rot;
+			cont_rot = 0;
+			processar_display(rpm); // Atualiza os displays com RPM calculado
+			flag_1s = 0;
+		}
+
+		switches = PINA & 0b00111111;
+		switch(switches){
+			case 0b00111110:
+				if(temp==0){sw1pressionado=1; temp=1;}
+				break;
+			case 0b00111101:
+				if(temp==0){sw2pressionado=1; temp=1;}
+				break;
+			case 0b00111011:
+				if(temp==0){sw3pressionado=1; temp=1;}
+				break;
+			case 0b00110111:
+				if(temp==0){sw4pressionado=1; temp=1;}
+				break;
+			case 0b00101111:
+				if(temp==0){sw5pressionado=1; temp=1;}
+				break;
+			case 0b00011111:
+				if(temp==0){sw6pressionado=1; temp=1;}
+				break;
+			default:
+				temp=0;
+				break;
+		}
+		verify();
+		sw1pressionado=0;
+		sw2pressionado=0;
+		sw3pressionado=0;
+		sw4pressionado=0;
+		sw5pressionado=0;
+		sw6pressionado=0;
+		updatedisp();
+	}
+}
