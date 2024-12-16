@@ -161,7 +161,7 @@ int main(void){
 
 	while(1){
 		if(flag_1s) {
-			int rpm = cont_rot * 30; // Supondo 1 pulso = 2 rotações e 1s para 30 rotações/minuto
+			int rpm = (cont_rot * 30) * OCR2 / 255;
 			cont_rot_ant = cont_rot;
 			cont_rot = 0;
 			processar_display(rpm); // Atualiza os displays com RPM calculado
