@@ -100,10 +100,10 @@ int ler_ADC(void){
 	ADCSRA |= (1<<ADSC);				//(ADSC = 1)
 	while((ADCSRA & (1<<ADSC)) != 0);	//esperar ADSC = 0)
 	
-	leituraL= ADCL;						//ler primeiro ADCL
+	//leituraL= ADCL;						//ler primeiro ADCL
 	leituraH= ADCH;
 	
-	return (leituraH<<8) + leituraL;
+	return leituraH;
 }
 
 //Rotina de interrupçao TC0
@@ -173,7 +173,7 @@ void updatedisp(void){
 		
 	}
 
-	//aparece se é switch ou teclado(d)	
+	//aparece se é switch ou teclado(d)
 	if(pickdisp==3){ //disp4
 		pickdisp=-1;
 		if(verUSART==1){
@@ -183,10 +183,10 @@ void updatedisp(void){
 		if(verUSART==2){
 			PORTA=0b00000000;
 			if(verrr==1){
-			PORTC=0b10100001;
+				PORTC=0b10100001;
 			}
 			if(verrr==0){
-			PORTC=0b10000111;	
+				PORTC=0b10000111;
 			}
 			
 		}
@@ -275,19 +275,38 @@ void verify(void){
 }
 
 void temperatura(void){
-	float lerrr;
+	 unsigned int temp1, temp2, media_adc, x;
+	
+	float tensao, temperatura_Celsius;
+	
 	
 	if(verrr==0){
 		if(flag5ms==1) //a cada 5 ms
 		{seg=seg+1;
-			flag5ms=0;}
-			if(seg==199){
-				seg=0;
-				lerrr=ler_ADC();
-				sprintf(transmit_buffer, "Temperatura: %f C  \r\n",lerrr);
-				send_message(transmit_buffer);
-				
-			}
+		flag5ms=0;}
+		if(seg==199){
+			seg=0;
+			
+					 // Realiza 2 leituras do ADC
+			 temp1 = ler_ADC();
+			 temp2 = ler_ADC();
+	 
+			 // Calcula a média das duas leituras
+			 media_adc = (temp1 + temp2) / 2;
+			// Converte o valor do ADC para tensão
+			tensao = (float) ((media_adc *5.0)/255.0);  // Se Vcc for 5V
+
+			// Converte a tensão para temperatura em Celsius
+			temperatura_Celsius = (tensao / 0.01);
+			temperatura_Celsius= (temperatura_Celsius-273.15);
+			x= (int)(temperatura_Celsius);
+			disp2 = (x / 10);  // Dezena
+			disp1 = (x % 10);  // Unidade
+			
+			sprintf(transmit_buffer, "Temperatura: %d C  \r\n",( int) (temperatura_Celsius));
+			send_message(transmit_buffer);
+			
+		}
 		
 		
 		
@@ -317,8 +336,8 @@ int main(void){
 	sw6pressionado= 0;
 
 	while(1){
-	
-			
+		
+		
 		
 		
 		if (rxUSART.receive == 1)
@@ -338,93 +357,93 @@ int main(void){
 				
 				valUSART=rxUSART.receiver_buffer;
 				
-			
-			
-			
-			if(valUSART=='S' || valUSART=='s' ){
-				verUSART=1;
-			}
-			if(valUSART=='d' || valUSART=='D' ){
-			
-				verUSART=2;
-			}
-		
-			
-			if(verUSART==2){
 				
 				
 				
-				switch(valUSART){
-					
-					case 'P':
-
-					case 'p':
-					
-					sw6pressionado= 1;
+				if(valUSART=='S' || valUSART=='s' ){
+					verUSART=1;
+				}
+				if(valUSART=='d' || valUSART=='D' ){
 					
 					verUSART=2;
-					
-					break;
-					
-					case '1':
-					sw1pressionado= 1;
-					
-					verUSART=2;
-					break;
-					
-					case '2':
-					sw2pressionado= 1;
-					
-					verUSART=2;
-					break;
-					
-					case '3':
-					sw3pressionado= 1;
-					
-					verUSART=2;
-					break;
-					
-					case '4':
-					sw4pressionado= 1;
-					
-					verUSART=2;
-					break;
-					
-					case 'I':
-					
-					case 'i':
-					sw5pressionado= 1;
-					
-					verUSART=2;
-					break;
-					
-					case 'B':
-					
-					case 'b':
-					
-						sprintf(transmit_buffer, "Velocidade: %d %%  \r\n",velo);
-						send_message(transmit_buffer);
-						
-									
-					verUSART=2;
-					break;
-					
-					case 't':
-					
-					case 'T':
-					if (verrr==1){verrr=0;}
-					else if (verrr==0){verrr=1;}
-				
-					/////////////////////////////////////////////////////////
-					verUSART=2;
-					break;
-					
-					
-			
 				}
 				
 				
-			}
+				if(verUSART==2){
+					
+					
+					
+					switch(valUSART){
+						
+						case 'P':
+
+						case 'p':
+						
+						sw6pressionado= 1;
+						
+						verUSART=2;
+						
+						break;
+						
+						case '1':
+						sw1pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case '2':
+						sw2pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case '3':
+						sw3pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case '4':
+						sw4pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case 'I':
+						
+						case 'i':
+						sw5pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case 'B':
+						
+						case 'b':
+						
+						sprintf(transmit_buffer, "Velocidade: %d %%  \r\n",velo);
+						send_message(transmit_buffer);
+						
+						
+						verUSART=2;
+						break;
+						
+						case 't':
+						
+						case 'T':
+						if (verrr==1){verrr=0;}
+						else if (verrr==0){verrr=1;}
+						
+						/////////////////////////////////////////////////////////
+						verUSART=2;
+						break;
+						
+						
+						
+					}
+					
+					
+				}
 			}
 
 			rxUSART.receive = 0;
@@ -483,10 +502,10 @@ int main(void){
 		verify();
 		
 		
-			
-			updatedisp();
-			temperatura();
-			
+		
+		
+		temperatura();
+		updatedisp();
 		
 		
 		sw1pressionado= 0;
@@ -505,4 +524,3 @@ int main(void){
 	
 	
 }
-
