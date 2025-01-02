@@ -1,0 +1,23 @@
+#include <avr/io.h>
+.extern leituraL
+.extern leituraH
+.global ler_ADC
+//?******************
+ler_ADC:
+   lds r16, ADCSRA       ; Carrega o valor de ADCSRA no registrador r16
+	ori r16, (1 << ADSC)  ; Define o bit ADSC (ADSC = 1)
+	sts ADCSRA, r16       ; Escreve o valor de volta em ADCSRA
+
+
+espera_adc:
+    lds r16, ADCSRA       ; Carrega o valor de ADCSRA no registrador r16
+	andi r16, (1 << ADSC) ; Verifica o bit ADSC
+	brne espera_adc       ; Se ADSC for 1, volta para "espera_adc"
+
+    rjmp espera_adc           ; Se não terminou, volta para "espera_adc"
+
+    in r24, ADCH              ; Lê o valor do registrador ADCH
+    sts leituraH, r24         ; Armazena o valor lido na variável "leituraH"
+    
+   
+    ret                       ; Retorna o valor no registrador R24
