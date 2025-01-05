@@ -14,8 +14,6 @@ espera_adc:
 	andi r16, (1 << ADSC) ; Verifica o bit ADSC
 	brne espera_adc       ; Se ADSC for 1, volta para "espera_adc"
 
-    rjmp espera_adc           ; Se não terminou, volta para "espera_adc"
-
     in r24, ADCH              ; Lê o valor do registrador ADCH
     sts leituraH, r24         ; Armazena o valor lido na variável "leituraH"
     
