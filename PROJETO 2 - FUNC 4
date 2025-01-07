@@ -63,7 +63,7 @@ void alterar_sentido(void) {
 
 	if (sentido == 1) {
 		PORTB = 0b01000000; // sentido horario
-sentido = 0;
+		sentido = 0;
 
 		} else {
 
@@ -109,7 +109,7 @@ void SW(){
 
 		rot = 25;
 
-	break;
+		break;
 
 		case 0b00111101: // SW2
 		rot = 50;
@@ -118,7 +118,7 @@ void SW(){
 		rot = 70;
 		break;
 
-	case 0b00110111: // SW4
+		case 0b00110111: // SW4
 
 		rot = 90;
 
@@ -184,8 +184,11 @@ ISR(TIMER0_COMP_vect){
 
 
 int main(void){
-
-
+	rot=0;
+	rot_ant=0;
+	cont_rot=0;
+	cont_rot_ant=0;
+	
 
 	inicio();
 
