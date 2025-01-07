@@ -1,0 +1,526 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <stdio.h>
+
+const unsigned char digitos[]={0xC0,0xF9,0xA4,0xB0,0x99,0x92,0x82,0xF8,0x80,0x90};
+
+
+
+typedef struct USARTRX
+{
+	char receiver_buffer;
+	unsigned char status;
+	unsigned char receive: 1;
+	unsigned char error: 1;
+	
+}USARTRX_st;
+
+volatile USARTRX_st rxUSART = {0,0,0,0};
+char transmit_buffer[25];
+
+volatile unsigned char flag5ms;
+
+unsigned char switches;
+unsigned char sw1pressionado;
+unsigned char sw2pressionado;
+unsigned char sw3pressionado;
+unsigned char sw4pressionado;
+unsigned char sw5pressionado;
+unsigned char sw6pressionado;
+unsigned char inv;
+unsigned char cont;
+unsigned char disp1;
+unsigned char disp2;
+unsigned char disp3;
+unsigned char pickdisp;
+unsigned char var;
+unsigned char temp;
+unsigned char valUSART;
+unsigned char verUSART;
+unsigned char holdopt;
+unsigned char velo;
+unsigned char verrr;
+unsigned char seg;
+
+
+void timer5ms(void){
+	
+	OCR0 = 77; //configura TC0 @16MHz
+
+	TCCR0 = 0b00001111; //5ms,prescaler 1024, CTC
+
+	TIMSK |= 0b00000010; //Interrupçao TC0, é a mesma coisa de (TIMSK=TIMSK|0b00000010)
+
+	SREG |= 0x80; //ativa flag I do SREG
+
+}
+
+void timer2(void){
+	TCCR2 = 0b01100011;    //config PWM PHASE CORRECT, PRESCALER 64
+	
+}
+
+
+void Inic(void) //Inicializaçoes
+{
+	UBRR1H = 0;
+	UBRR1L = 207;
+	UCSR1A = (1<<U2X1);
+	UCSR1B = (1<<RXCIE1)|(1<<RXEN1)|(1<<TXEN1);
+	UCSR1C = (1<<USBS1)|(1<<UCSZ11)|(1<<UCSZ10);
+	
+
+	DDRC = 0xFF; //configura o PORTC(Displays) com saidas
+
+	PORTC = 0xFF; //Desliga todos os displays
+
+	DDRA = 0b11000000; //configura o PORTA(switches + selecao displays) como entradas
+
+	PORTA = 0b11000000; //os pinos 6 e 7 sao saidas
+
+	DDRB = 0b11100000;		//config motor
+	PINB = 0b11111111;
+	PORTB = 0b10000000;		//comeca parado  + PWD ligado
+	
+
+	timer5ms();
+	timer2();
+	
+	/**** A/D ****/
+	ADMUX = 0b00100000; //AREF, ajustado a esquerda, canal 0 (funcionamento normal)
+	//ADMUX = 0b00100001; //AREF, ajustado a esquerda, canal 1 (ponteciometro)
+	ADCSRA= 0b10000111; //ADEN, 1/128
+	
+	sei();
+}
+
+int ler_ADC(void){
+	
+	unsigned char leituraL, leituraH;
+	ADCSRA |= (1<<ADSC);				//(ADSC = 1)
+	while((ADCSRA & (1<<ADSC)) != 0);	//esperar ADSC = 0)
+	
+	//leituraL= ADCL;						//ler primeiro ADCL
+	leituraH= ADCH;
+	
+	return leituraH;
+}
+
+//Rotina de interrupçao TC0
+
+ISR(TIMER0_COMP_vect)
+
+{
+
+	flag5ms=1;
+	
+}
+
+ISR(USART1_RX_vect){
+	rxUSART.status = UCSR1A;
+	
+	if ( rxUSART.status & ((1<<FE1) | (1<<DOR1) | (1>>UPE1)))
+	rxUSART.error = 1;
+	
+	rxUSART.receiver_buffer = UDR1;
+	rxUSART.receive = 1;
+}
+
+void send_message(char *buffer){
+	unsigned char i=0;
+	while(buffer[i]!='\0')
+	{
+		while((UCSR1A & 1<<UDRE1)==0);
+		UDR1=buffer[i];
+		i++;
+	}
+}
+
+
+void parado(void){
+	if(PORTB==0b10000000 || PORTB==0b11100000 || PORTB==0b01100000 || PORTB==0b00000000){ //verifica se esta parado
+		PORTB=0b10100000; //define um sentido de movimento
+	}
+	
+	
+}
+void updatedisp(void){
+	
+	
+	
+	if(pickdisp==0){ //dis1
+		PORTA=0b11000000;
+		PORTC=digitos[disp1];
+		
+		
+	}
+	if(pickdisp==1){ //dis2
+		PORTA=0b10000000;
+		PORTC=digitos[disp2];
+		
+		
+	}
+	if(pickdisp==2){ //disp3
+		
+		PORTA=0b01000000;
+		if(disp3==0){
+			PORTC=0b11111111;
+		}
+		if(disp3==1){
+			PORTC=0b10111111;
+			
+		}
+		
+	}
+
+	//aparece se é switch ou teclado(d)
+	if(pickdisp==3){ //disp4
+		pickdisp=-1;
+		if(verUSART==1){
+			PORTA=0b00000000;
+			PORTC=0b10010010;
+		}
+		if(verUSART==2){
+			PORTA=0b00000000;
+			if(verrr==1){
+				PORTC=0b10100001;
+			}
+			if(verrr==0){
+				PORTC=0b10000111;
+			}
+			
+		}
+	}
+	pickdisp++;
+	
+
+
+}
+
+
+void verify(void){
+	
+	if(sw1pressionado==1)  //25%
+	{	disp1=5;
+		disp2=2;
+		parado();
+		OCR2 = (25 * 255) / 100; // Ajusta o duty cycle do PWM
+		velo=25;
+	}
+	if(sw2pressionado==1) //50%
+	{	disp1=0;
+		disp2=5;
+		parado();
+		OCR2 = (50* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=50;
+	}
+	if(sw3pressionado==1) //70%
+	{ disp1=0;
+		disp2=7;
+		parado();
+		OCR2 = (70* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=70;
+	}
+	if(sw4pressionado==1) //90%
+
+	{disp1=0;
+		disp2=9;
+		parado();
+		OCR2 = (90* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=90;
+	}
+	if(sw5pressionado==1) //inverte sentido
+	
+	{	 inv=PORTB;
+		//sentido invertido ou nao
+		if(disp3==1){disp3=0;}
+		else{disp3=1;
+		}
+		
+		while(cont<50){
+			
+			PORTB = 0b00011111 & PORTB;		//motor parado//////////parar motor
+			if(flag5ms==1) //a cada 5 ms
+			{updatedisp();
+				flag5ms=0;
+				
+				if(cont==49){
+					if(inv==0b10100000){
+						PORTB=0b11000000;
+					}
+					if(inv==0b11000000){
+						PORTB=0b10100000;
+					}
+					
+				}
+				
+				cont++;
+				
+			}
+			
+			
+		}
+		cont=0;
+	}
+	if(sw6pressionado==1) //para
+	{disp1=0;
+		disp2=0;
+		OCR2 = (0* 255) / 100; // Ajusta o duty cycle do PWM
+		velo=0;
+		PORTB = 0b00011111 & PORTB;		//motor parado
+	}
+	
+	
+	
+}
+
+void temperatura(void){
+	unsigned int temp1, temp2, media_adc, x;
+	
+	float tensao, temperatura_Celsius;
+	
+	
+	if(verrr==0){
+		if(flag5ms==1) //a cada 5 ms
+		{seg=seg+1;
+		flag5ms=0;}
+		if(seg==199){
+			seg=0;
+			
+			// Realiza 2 leituras do ADC
+			temp1 = ler_ADC();
+			temp2 = ler_ADC();
+			
+			// Calcula a média das duas leituras
+			media_adc = (temp1 + temp2) / 2;
+			// Converte o valor do ADC para tensão
+			tensao = (float) ((media_adc *5.0)/255.0);  // Se Vcc for 5V
+
+			// Converte a tensão para temperatura em Celsius
+			temperatura_Celsius = (tensao / 0.01);
+			temperatura_Celsius= (temperatura_Celsius-273.15);
+			x= (int)(temperatura_Celsius);
+			disp2 = (x / 10);  // Dezena
+			disp1 = (x % 10);  // Unidade
+			
+			sprintf(transmit_buffer, "Temperatura: %d C  \r\n",( int) (temperatura_Celsius));
+			send_message(transmit_buffer);
+			
+		}
+		
+		
+		
+	}
+	
+	
+	
+}
+
+
+
+int main(void){
+	holdopt=0;
+	seg=0;
+	temp=0;
+	Inic();
+	velo=0;
+	verrr=1;
+	verUSART=0;
+	flag5ms=0;
+	pickdisp=0;
+	sw1pressionado= 0;
+	sw2pressionado= 0;
+	sw3pressionado= 0;
+	sw4pressionado= 0;
+	sw5pressionado= 0;
+	sw6pressionado= 0;
+
+	while(1){
+		
+		
+		
+		
+		if (rxUSART.receive == 1)
+		{
+			if(rxUSART.error == 1)
+			{
+				//resolver erros
+				rxUSART.error = 0;
+			}
+			else
+			{
+
+				sprintf(transmit_buffer, "Tecla: %c\r\n", rxUSART.receiver_buffer);
+				send_message(transmit_buffer);
+				
+				
+				
+				valUSART=rxUSART.receiver_buffer;
+				
+				
+				
+				
+				if(valUSART=='S' || valUSART=='s' ){
+					verUSART=1;
+				}
+				if(valUSART=='d' || valUSART=='D' ){
+					
+					verUSART=2;
+				}
+				
+				
+				if(verUSART==2){
+					
+					
+					
+					switch(valUSART){
+						
+						case 'P':
+
+						case 'p':
+						
+						sw6pressionado= 1;
+						
+						verUSART=2;
+						
+						break;
+						
+						case '1':
+						sw1pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case '2':
+						sw2pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case '3':
+						sw3pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case '4':
+						sw4pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case 'I':
+						
+						case 'i':
+						sw5pressionado= 1;
+						
+						verUSART=2;
+						break;
+						
+						case 'B':
+						
+						case 'b':
+						
+						sprintf(transmit_buffer, "Velocidade: %d %%  \r\n",velo);
+						send_message(transmit_buffer);
+						
+						
+						verUSART=2;
+						break;
+						
+						case 't':
+						
+						case 'T':
+						if (verrr==1){verrr=0;}
+						else if (verrr==0){verrr=1;}
+						
+						/////////////////////////////////////////////////////////
+						verUSART=2;
+						break;
+						
+						
+						
+					}
+					
+					
+				}
+			}
+
+			rxUSART.receive = 0;
+		}
+		
+		if(verUSART==1){
+			
+			switches = PINA & 0b00111111;
+			
+			
+			switch(switches){
+				case 0b00111110: //sw1 foi pressionado
+				if(temp==0){sw1pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+
+				case 0b00111101: //sw2 foi pressionado
+				if(temp==0){sw2pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+
+				case 0b00111011: //sw3 foi pressionado
+				if(temp==0){sw3pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+
+				case 0b00110111: //sw4 foi pressionado
+				if(temp==0){sw4pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+				
+				case 0b00101111: //sw5 foi pressionado
+				if(temp==0){sw5pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+				
+				case 0b00011111: //sw6 foi pressionado
+				if(temp==0){sw6pressionado= 1;
+				temp=1;}
+				verUSART=1;
+				break;
+				default: temp=0;
+				break;
+				
+			}
+			
+		}
+		
+		
+		
+		verify();
+		
+		
+		
+		
+		temperatura();
+		updatedisp();
+		
+		
+		sw1pressionado= 0;
+		sw2pressionado= 0;
+		sw3pressionado= 0;
+		sw4pressionado= 0;
+		sw5pressionado= 0;
+		sw6pressionado= 0;
+
+		
+		
+		
+		
+	}
+	
+	
+	
+}
